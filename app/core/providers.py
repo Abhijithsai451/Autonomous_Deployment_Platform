@@ -1,7 +1,7 @@
 from typing import AsyncIterable
-
 import httpx
 from dishka import Provider, Scope, provide
+from app.core.database import DatabaseManager
 
 
 class AppConfig:
@@ -22,7 +22,6 @@ class DatabaseSession:
             pass
 
 # Dishka Infrastructure Providers
-
 class InfrastructureProvider(Provider):
     @provide(scope= Scope.APP)
     def provide_config(self)-> AppConfig:
@@ -33,6 +32,12 @@ class InfrastructureProvider(Provider):
         session = DatabaseEngine(config.db_url)
         yield session
         await session.close()
+
+    @provide(scope=Scope.APP)
+    async def provide_db_manager(self, config: AppConfig) -> AsyncIterable[DatabaseManager]:
+        manager = DatabaseManager(config)
+        yield manager
+        await manager.close()
 
     @provide(scope=Scope.REQUEST)
     async def provide_db_session(self, engine: DatabaseEngine) -> AsyncIterable[DatabaseSession]:
