@@ -24,7 +24,7 @@ class DatabaseSession:
 # Dishka Infrastructure Providers
 
 class InfrastructureProvider(Provider):
-    @Provide(scope= Scope.APP)
+    @provide(scope= Scope.APP)
     def provide_config(self)-> AppConfig:
         return AppConfig()
 
