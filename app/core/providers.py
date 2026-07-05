@@ -1,7 +1,11 @@
 from typing import AsyncIterable
 import httpx
 from dishka import Provider, Scope, provide
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.database import DatabaseManager
+from app.events.broker import EventBroker
+from app.modules.platform.repositories import WorkflowRepository, TaskRepository
 
 
 class AppConfig:
@@ -44,7 +48,22 @@ class InfrastructureProvider(Provider):
         session = DatabaseSession(engine)
         yield session
         await session.close()
+    # -- NATS Jetstream --
+    @provide(scope = Scope.APP)
+    async def provide_event_brokers(self,config: AppConfig) ->AsyncIterable[EventBroker]:
+        broker = EventBroker(config)
+        await broker.connect()
+        yield broker
+        await broker.close()
 
+    # -- Repository --
+    @provide(scope=Scope.APP)
+    async def provide_workflow_repo(self, session: AsyncSession)-> WorkflowRepository:
+        return WorkflowRepository(session=session)
+
+    @provide(scope=Scope.APP)
+    async def provide_task_repo(self, session: AsyncSession) -> TaskRepository:
+        return TaskRepository(session=session)
     @provide(scope=Scope.REQUEST)
     async def provide_http_client(self) -> AsyncIterable[httpx.AsyncClient]:
         async with httpx.AsyncClient() as client:

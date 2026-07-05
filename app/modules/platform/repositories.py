@@ -1,7 +1,5 @@
 from typing import TypeVar, Generic, Optional, List
 from uuid import UUID
-
-import Workflow
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
