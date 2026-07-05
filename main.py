@@ -9,7 +9,6 @@ from app.core.providers import InfrastructureProvider
 from app.events.broker import EventBroker
 from app.modules.platform.repositories import WorkflowRepository
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
 
