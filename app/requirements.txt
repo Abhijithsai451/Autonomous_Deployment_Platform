@@ -1,3 +1,4 @@
 dishka
 fastapi
 sqlalchemy
+nats-py
