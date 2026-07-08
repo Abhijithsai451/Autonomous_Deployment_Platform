@@ -1,23 +1,35 @@
-# Database Schema: organization_svc
+# Database Schema: organization
 
 ## Table: organizations
 - id: UUID (PK)
 - name: VARCHAR(255)
 - slug: VARCHAR(100) (Unique)
 - status: ENUM('ACTIVE', 'SUSPENDED', 'ARCHIVED')
-- settings: JSONB (Store tenant-level config)
+- plan: ENUM('FREE', 'PRO', 'ENTERPRISE')
+- general_settings: JSON
+- security_settings: JSON
+- llm_settings: JSON
+- notification_settings: JSON
+- billing_settings: JSON
 - created_at: TIMESTAMPTZ
+- updated_at: TIMESTAMPTZ
+
+## Table: projects
+- id: UUID (PK)
+- organization_id: UUID (FK)
+- name: VARCHAR
+- description: TEXT
+- lifecycle: VARCHAR
+- metadata: JSONB
+- created_at: TIMESTAMPTZ
+- updated_at: TIMESTAMPTZ
 
 ## Table: departments
 - id: UUID (PK)
-- organization_id: UUID (FK -> organizations)
-- name: VARCHAR(100)
-- description: TEXT
-- department_type: VARCHAR(50) (e.g., 'SRE', 'FINANCE')
-- created_at: TIMESTAMPTZ
-
-## Table: org_settings
 - organization_id: UUID (FK)
-- key: VARCHAR(50)
-- value: JSONB
-- PRIMARY KEY(organization_id, key)
+- name: VARCHAR(100)
+- type: ENUM('SRE', 'SUPPORT', ...)
+- description: TEXT
+- metadata: JSONB
+- created_at: TIMESTAMPTZ
+- updated_at: TIMESTAMPTZ

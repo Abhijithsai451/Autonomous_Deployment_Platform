@@ -1,11 +1,15 @@
-    BLUEPRINT ||--o{ INSTANCE : "spawns"
-    INSTANCE ||--o{ STEP : "executes"
-    
+    BLUEPRINT ||--|{ INSTANCE : "spawns"
+    INSTANCE ||--|{ TASK : "contains"
+    INSTANCE ||--|{ EVENT : "logs"
+    TASK ||--|{ TASK_DEPENDENCY : "has"
+
     BLUEPRINT {
-        uuid id PK
-        uuid department_id
-        string name
-        jsonb definition
+        uuid temporal_workflow_id PK
+        uuid temporal_run_id
+        string status
+        string current_task
+        json inputs
+        json outputs
     }
 
     INSTANCE {
@@ -13,13 +17,13 @@
         uuid blueprint_id FK
         enum status
         jsonb input_data
-        timestamp started_at
+        string current_step
+        uuid started_by
     }
 
-    STEP {
+    TASK {
         uuid id PK
         uuid instance_id FK
         string action_type
         enum status
-        jsonb result
     }

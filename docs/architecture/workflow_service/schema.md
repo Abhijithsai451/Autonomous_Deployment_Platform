@@ -1,11 +1,12 @@
-# Database Schema: workflow_svc
+# Database Schema: workflow
 
-## Table: blueprints
-- id: UUID (PK)
-- department_id: UUID
-- name: VARCHAR(255)
-- definition: JSONB
-- version: INT
+## Table: workflow_blueprints
+- temporal_workflow_id: UUID (PK)
+- temporal_run_id: UUID
+- status: VARCHAR(255)
+- current_task: VARCHAR(255)
+- inputs: JSONB
+- outputs: JSONB
 
 ## Table: instances
 - id: UUID (PK)
@@ -13,12 +14,4 @@
 - status: ENUM('PENDING', 'RUNNING', 'PAUSED', 'COMPLETED', 'FAILED')
 - input_data: JSONB
 - current_step: VARCHAR(100)
-- started_by: UUID
-- started_at: TIMESTAMPTZ
-
-## Table: steps
-- id: UUID (PK)
-- instance_id: UUID (FK)
-- action_type: VARCHAR(100)
-- status: ENUM('PENDING', 'SUCCESS', 'FAILED')
-- result: JSONB
+- started_by: UUID (User/Agent ID)

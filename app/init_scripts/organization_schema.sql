@@ -1,9 +1,11 @@
--- Create and connect to the organization database
+--  Create and connect to the organization database
 CREATE DATABASE organization;
 \c organization;
 
 -- Create custom enums
 CREATE TYPE org_status AS ENUM ('ACTIVE', 'SUSPENDED', 'ARCHIVED');
+CREATE TYPE org_plan AS ENUM ('FREE', 'PRO', 'ENTERPRISE');
+CREATE TYPE dept_type AS ENUM ('SRE', 'SUPPORT', 'FINANCE', 'ENGINEERING', 'OPERATIONS');
 
 -- Create tables
 CREATE TABLE organizations (
@@ -11,25 +13,38 @@ CREATE TABLE organizations (
     name VARCHAR(255) NOT NULL,
     slug VARCHAR(100) UNIQUE NOT NULL,
     status org_status NOT NULL DEFAULT 'ACTIVE',
-    settings JSONB NOT NULL DEFAULT '{}'::jsonb,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    plan org_plan NOT NULL DEFAULT 'FREE',
+    general_settings JSON NOT NULL DEFAULT '{}'::json,
+    security_settings JSON NOT NULL DEFAULT '{}'::json,
+    llm_settings JSON NOT NULL DEFAULT '{}'::json,
+    notification_settings JSON NOT NULL DEFAULT '{}'::json,
+    billing_settings JSON NOT NULL DEFAULT '{}'::json,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE projects (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    lifecycle VARCHAR(100),
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE departments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     name VARCHAR(100) NOT NULL,
+    type dept_type NOT NULL,
     description TEXT,
-    department_type VARCHAR(50) NOT NULL, -- e.g., 'SRE', 'FINANCE'
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE org_settings (
-    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-    key VARCHAR(50) NOT NULL,
-    value JSONB NOT NULL DEFAULT '{}'::jsonb,
-    PRIMARY KEY (organization_id, key)
-);
-
--- Indexes for rapid lookups
+-- Indexes for fast microservice lookups
+CREATE INDEX idx_projects_org ON projects(organization_id);
 CREATE INDEX idx_departments_org ON departments(organization_id);
