@@ -1,4 +1,2 @@
-dishka
-fastapi
-sqlalchemy
 nats-py
+psycopg[binary]

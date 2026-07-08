@@ -1,0 +1,28 @@
+services:
+  db:
+    image: postgres:17
+    container_name: postgres_db
+    restart: always
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: cortexops
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+  nats:
+    image: nats:latest
+    container_name: nats_main
+    restart: always
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - nats_storage:/data
+    command: [ "-js", "-sd", "/data" ]
+
+
+volumes:
+  pgdata:
+  nats_storage:

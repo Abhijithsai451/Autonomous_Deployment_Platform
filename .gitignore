@@ -1,1 +1,9 @@
 /.idea/.gitignore
+/app_bkp/events/broker.py
+/app_bkp/core/database.py
+/app_bkp/main.py
+/app_bkp/modules/platform/models.py
+/Plan.txt
+/app_bkp/core/providers.py
+/app_bkp/modules/platform/repositories.py
+/app_bkp/requirements.txt
