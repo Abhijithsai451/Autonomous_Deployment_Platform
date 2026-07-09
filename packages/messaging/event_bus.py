@@ -9,7 +9,6 @@ from nats.js.api import Header
 from opentelemetry import trace
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 
-from app.core.tracing import inject_trace_context
 
 logger = logging.getLogger("cortexops_sdk.messaging")
 

@@ -9,7 +9,7 @@ terraform {
 
 provider "docker" {}
 
-# Create a dedicated network so your Python app can easily find them later
+# Create a dedicated network so your Python apps can easily find them later
 resource "docker_network" "cortexops_network" {
   name = "cortexops_network"
 }
