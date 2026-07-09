@@ -4,7 +4,7 @@ from dishka import make_async_container, FromDishka
 from dishka.integrations.fastapi import FastapiProvider, setup_dishka, inject
 from fastapi import FastAPI, APIRouter
 
-from app.core.providers import InfrastructureProvider, AppConfig, DatabaseSession
+from apps.core.providers import InfrastructureProvider, AppConfig, DatabaseSession
 
 
 @asynccontextmanager

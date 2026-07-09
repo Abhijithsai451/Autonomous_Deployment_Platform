@@ -20,7 +20,7 @@ Deploying a Redis instance (e.g., AWS ElastiCache) manually is prone to configur
 ```hcl
 # main.tf - Defining an ElastiCache Cluster
 resource "aws_elasticache_cluster" "main" {
-  cluster_id           = "app-cache-cluster"
+  cluster_id           = "apps-cache-cluster"
   engine               = "redis"
   node_type            = "cache.t4g.micro"
   num_cache_nodes      = 1
