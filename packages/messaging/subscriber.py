@@ -1,3 +1,12 @@
+import json
+import logging
+from typing import Dict, Any, Callable, Awaitable
+
+import nats
+from opentelemetry import trace
+from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
+logger = logging.getLogger("cortexops_sdk.messaging")
+
 class EventSubscriber:
     def __init__(self, nats_url: str = "nats://localhost:4222"):
         self.nats_url = nats_url
