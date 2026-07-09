@@ -23,6 +23,15 @@ services:
       - nats_storage:/data
     command: [ "-js", "-sd", "/data" ]
 
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://db/keycloak
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: adminpassword
+    command: start-dev
+
   cache:
     image: redis:7.2-alpine
     container_name: redis_cache
@@ -33,7 +42,13 @@ services:
        - redis_data:/data
     command: ["redis-server", "--appendonly", "yes"]
 
+  api:
+    build: .
+    depends_on:
+      - db
+      - keycloak
 volumes:
   pgdata:
   nats_storage:
   redis_data:
+
