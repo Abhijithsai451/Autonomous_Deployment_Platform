@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Dict, Any, Callable, Awaitable
+from typing import Callable, Awaitable
 
 import nats
 from opentelemetry import trace

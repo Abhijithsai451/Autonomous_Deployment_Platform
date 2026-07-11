@@ -32,6 +32,7 @@ class User(Base):
     status = Column(Enum(UserStatus), default = UserStatus.INVITED, index = True, nullable = False)
 
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 
     organization = relationship("Organization", back_populates="users")
     roles = relationship("Role", secondary=user_roles)

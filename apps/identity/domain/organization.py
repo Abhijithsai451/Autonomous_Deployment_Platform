@@ -12,6 +12,11 @@ class OrgStatus(enum.Enum):
     SUSPENDED = "SUSPENDED"
     ARCHIVED = "ARCHIVED"
 
+class OrgPlan:
+    FREE = "FREE"
+    PRO = "PRO"
+    ENTERPRISE = "ENTERPRISE"
+
 class Organization(Base):
     __tablename__ = "organizations"
     __table_args__ = {"schema": "identity"}
@@ -20,7 +25,8 @@ class Organization(Base):
     name = Column(String(255), unique=True, nullable=False)
     slug = Column(String(100), unique=True, index=True, nullable=False)
     status = Column(Enum(OrgStatus), default=OrgStatus.ACTIVE, nullable=False)
+    plan = Column(Enum(OrgPlan), default=OrgPlan.FREE, nullable=False)
     settings = Column(JSON, default={}, nullable=False)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
-    users = relationship("User", back_populates="organization")
+    users = relationship("User", back_populates="organization", cascade = "all, delete-orphan")
