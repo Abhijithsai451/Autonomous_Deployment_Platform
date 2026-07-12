@@ -2,6 +2,7 @@ fastapi
 sqlalchemy
 pydantic-settings
 nats-py
+uvicorn
 psycopg[binary]
 opentelemetry-api
 opentelemetry-sdk

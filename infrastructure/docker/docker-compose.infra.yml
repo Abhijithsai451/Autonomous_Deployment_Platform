@@ -43,7 +43,9 @@ services:
     command: ["redis-server", "--appendonly", "yes"]
 
   api:
-    build: .
+    build:
+      context: ../../
+      dockerfile: infrastructure/docker/Dockerfile
     depends_on:
       - db
       - keycloak

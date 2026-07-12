@@ -9,7 +9,7 @@ INFRA_COMPOSE="infrastructure/docker/docker-compose.infra.yml"
 APPS_COMPOSE="infrastructure/docker/docker-compose.apps.yml"
 
 echo "========================================="
-echo "   Starting CortexOps Platform From Root "
+echo "   Starting CortexOps Platform "
 echo "========================================="
 
 # 1. Ensure the shared network exists before starting services
@@ -20,18 +20,16 @@ else
     echo "🌐 Shared network '$NETWORK_NAME' already exists."
 fi
 
-# 2. Spin up Core Infrastructure Frameworks (Postgres, NATS, Keycloak, Redis)
-# Running from root means --env-file is simply '.env'
+# 2. Launch Core Infrastructure Frameworks (Postgres, NATS, Keycloak, Redis)
 echo "🏗️  Launching Core Infrastructure (Databases & Brokers)..."
-docker compose --env-file .env -f "$INFRA_COMPOSE" up -d
+docker compose --env-file .env  -f "$INFRA_COMPOSE" up -d
 
 echo "⏳ Waiting a few seconds for core services to stabilize..."
 sleep 5
 
-# 3. Spin up Application Services (Identity API, etc.)
-# Docker build context natively remains at the repo root now!
+# 3. Launch Application Services (Identity , Audit, Workflow etc.)
 echo "⚡ Launching Application Services..."
-docker compose --env-file .env -f "$APPS_COMPOSE" up --build -d
+docker compose --env-file .env  -f "$APPS_COMPOSE" up --build -d
 
 echo "========================================="
 echo "✅ All systems are online!"
