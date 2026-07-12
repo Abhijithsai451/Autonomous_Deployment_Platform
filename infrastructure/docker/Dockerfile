@@ -1,10 +1,10 @@
 FROM python:3.10-slim
 
-WORKDIR /apps
+WORKDIR /app
 
 # 1. Copy and install standard requirements
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY ./requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # 2. Copy all code structures (including apps/ and packages/)
 COPY . .
