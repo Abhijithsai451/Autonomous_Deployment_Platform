@@ -8,3 +8,4 @@
 /app_bkp/modules/platform/repositories.py
 /app_bkp/requirements.txt
 /.idea
+/.env

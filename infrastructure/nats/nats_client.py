@@ -8,7 +8,7 @@ from packages.messaging.subscriber import Subscriber
 
 logger = logging.getLogger("cortexops_sdk.messaging")
 
-class IdentityEventBus:
+class EventBus:
     _publisher = None
     _subscriber = None
 
