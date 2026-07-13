@@ -16,9 +16,11 @@ services:
       - KEYCLOAK_CLIENT_SECRET
       - KEYCLOAK_ADMIN_USER
       - KEYCLOAK_ADMIN_PASSWORD
+      - NATS_URL
     networks:
-      - cortexops_shared_network
+      - shared_network
 
 networks:
-  cortexops_shared_network:
+  shared_network:
+    name: cortexops_shared_network
     external: true

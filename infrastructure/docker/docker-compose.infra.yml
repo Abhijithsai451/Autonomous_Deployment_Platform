@@ -12,6 +12,8 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./scripts:/docker-entrypoint-initdb.d
+    networks:
+      - shared_network
   nats:
     image: nats:latest
     container_name: nats_main
@@ -22,6 +24,8 @@ services:
     volumes:
       - nats_storage:/data
     command: [ "-js", "-sd", "/data" ]
+    networks:
+      - shared_network
 
   keycloak:
     image: quay.io/keycloak/keycloak:24.0
@@ -31,6 +35,8 @@ services:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: adminpassword
     command: start-dev
+    networks:
+      - shared_network
 
   cache:
     image: redis:7.2-alpine
@@ -41,6 +47,8 @@ services:
     volumes:
        - redis_data:/data
     command: ["redis-server", "--appendonly", "yes"]
+    networks:
+      - shared_network
 
   api:
     build:
@@ -49,8 +57,14 @@ services:
     depends_on:
       - db
       - keycloak
+    networks:
+      - shared_network
 volumes:
   pgdata:
   nats_storage:
   redis_data:
 
+networks:
+  shared_network:
+    name: cortexops_shared_network
+    external: true

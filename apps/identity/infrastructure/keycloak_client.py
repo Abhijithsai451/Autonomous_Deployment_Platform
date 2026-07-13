@@ -1,6 +1,6 @@
 from keycloak import KeycloakOpenID, KeycloakAdmin
 
-from apps.identity.config.settings import settings
+from packages.config.settings import settings
 
 
 class KeycloakClient:
