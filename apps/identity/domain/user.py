@@ -21,8 +21,8 @@ user_roles = Table(
 )
 
 class User(Base):
-    __tablename__ : "users"
-    __tableargs__ : {"schema" : "identity"}
+    __tablename__ = "users"
+    __table_args__ = {"schema" : "identity"}
 
     id = Column(UUID(as_uuid = True), primary_key = True, default = uuid4)
     organization_id = Column(UUID(as_uuid = True), ForeignKey("identity.organizations.id"), nullable = False)

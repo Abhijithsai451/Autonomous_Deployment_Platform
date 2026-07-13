@@ -1,4 +1,4 @@
-import enum
+from enum import Enum as PyEnum
 from datetime import datetime
 from uuid import uuid4
 
@@ -7,12 +7,12 @@ from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
 
-class OrgStatus(enum.Enum):
+class OrgStatus(PyEnum):
     ACTIVE = "ACTIVE"
     SUSPENDED = "SUSPENDED"
     ARCHIVED = "ARCHIVED"
 
-class OrgPlan:
+class OrgPlan(str, PyEnum):
     FREE = "FREE"
     PRO = "PRO"
     ENTERPRISE = "ENTERPRISE"
@@ -25,7 +25,7 @@ class Organization(Base):
     name = Column(String(255), unique=True, nullable=False)
     slug = Column(String(100), unique=True, index=True, nullable=False)
     status = Column(Enum(OrgStatus), default=OrgStatus.ACTIVE, nullable=False)
-    plan = Column(Enum(OrgPlan), default=OrgPlan.FREE, nullable=False)
+    plan = Column(Enum(OrgPlan, native_enum=False), default=OrgPlan.FREE, nullable=False)
     settings = Column(JSON, default={}, nullable=False)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 

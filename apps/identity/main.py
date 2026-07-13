@@ -1,8 +1,6 @@
 import logging
 from contextlib import asynccontextmanager
-
 from fastapi import FastAPI
-
 from apps.identity.api.v1 import auth, organizations, users, roles_permissions, service_accounts, api_keys
 from infrastructure.nats.nats_client import EventBus
 

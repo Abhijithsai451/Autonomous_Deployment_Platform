@@ -9,19 +9,16 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://user:password@db:5432/cortexops
-      - KEYCLOAK_URL=http://keycloak:8080
-      - KEYCLOAK_REALM=CortexOps
-      - KEYCLOAK_CLIENT_ID=identity-service
-      - KEYCLOAK_CLIENT_SECRET=keycloak_client_secret
-      - KEYCLOAK_ADMIN_USER=admin
-      - KEYCLOAK_ADMIN_PASSWORD=adminpassword
-      - NATS_URL=nats://nats:4222
+      - DATABASE_URL
+      - KEYCLOAK_URL
+      - KEYCLOAK_REALM
+      - KEYCLOAK_CLIENT_ID
+      - KEYCLOAK_CLIENT_SECRET
+      - KEYCLOAK_ADMIN_USER
+      - KEYCLOAK_ADMIN_PASSWORD
     networks:
-      - cortexops_network
-
+      - cortexops_shared_network
 
 networks:
-  cortexops_network:
+  cortexops_shared_network:
     external: true
-    name: cortexops_shared_network
