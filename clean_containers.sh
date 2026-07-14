@@ -1,8 +1,49 @@
-# 1. Stop everything running
-docker compose -f infrastructure/docker/docker-compose.infra.yml -f infrastructure/docker/docker-compose.apps.yml down
+#!/bin/bash
 
-# 2. Prune the build cache (Forces docker to read your local files fresh)
-docker builder prune -a -f
+# Exit immediately if a command exits with a non-zero status
+set -e
 
-# 3. Delete all images associated with this project completely
-docker image prune -a -f
+# Configuration Paths
+INFRA_COMPOSE="infrastructure/docker/docker-compose.infra.yml"
+APPS_COMPOSE="infrastructure/docker/docker-compose.apps.yml"
+
+if [ "$1" = "--clean" ]; then
+    echo "=========================================="
+    echo "🧹 RUNNING DEEP CLEAN..."
+    echo "=========================================="
+
+    # 1. Stop everything running
+    echo "Stopping all containers..."
+    docker compose -f "$INFRA_COMPOSE" -f "$APPS_COMPOSE" down
+
+    # 2. Prune the build cache (Forces docker to read local files fresh)
+    echo "Pruning Docker builder cache..."
+    docker builder prune -a -f
+
+    # 3. Delete all images associated with this project completely
+    echo "Pruning unused images..."
+    docker image prune -a -f
+
+    echo "✅ Deep clean complete!"
+    ./run.sh
+
+
+else
+    echo "=========================================="
+    echo "🔄 RESETTING CONTAINERS & STARTING UP..."
+    echo "=========================================="
+
+    # 1. Take down all app and infra containers completely (including volumes)
+    echo "Removing containers and volumes (-v)..."
+    docker compose -f "$INFRA_COMPOSE" -f "$APPS_COMPOSE" down -v
+
+    # 2. Fire up the startup runner script clean
+    if [ -f "./run.sh" ]; then
+        echo "Starting fresh stack via ./run.sh..."
+        chmod +x ./run.sh
+        ./run.sh
+    else
+        echo "❌ Error: ./run.sh not found in the current directory!"
+        exit 1
+    fi
+fi

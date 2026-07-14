@@ -31,10 +31,18 @@ services:
     image: quay.io/keycloak/keycloak:24.0
     environment:
       KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://db/keycloak
-      KC_BOOTSTRAP_ADMIN_USERNAME: admin
-      KC_BOOTSTRAP_ADMIN_PASSWORD: adminpassword
+      KC_DB_URL: jdbc:postgresql://postgres_db:5432/identity
+      KC_DB_USERNAME: user
+      KC_DB_PASSWORD: password
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: adminpassword
+      KC_HOSTNAME: http://localhost:8080
+      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT_HTTPS: "false"
+      KC_HTTP_ENABLED: "true"
     command: start-dev
+    ports:
+      - "8080:8080"
     networks:
       - shared_network
 
