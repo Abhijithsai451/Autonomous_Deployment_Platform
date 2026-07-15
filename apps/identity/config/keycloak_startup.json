@@ -1,0 +1,36 @@
+{
+  "id": "cortexops",
+  "realm": "cortexops",
+  "enabled": true,
+  "users": [
+    {
+      "username": "cortexuser",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "cortexops-backend",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "fCBfzs0J4URf2d58iUdPDliNFMAzvkwo",
+      "redirectUris": [
+        "http://localhost:8000/docs/oauth2-redirect"
+      ],
+      "webOrigins": [
+        "*"
+      ],
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "publicClient": false
+    }
+  ]
+}
