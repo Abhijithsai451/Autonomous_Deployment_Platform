@@ -14,7 +14,8 @@ if [ "$1" = "--clean" ]; then
 
     # 1. Stop everything running
     echo "Stopping all containers..."
-    docker compose -f "$INFRA_COMPOSE" -f "$APPS_COMPOSE" down -v
+    docker compose -f "$INFRA_COMPOSE" down -v
+    docker compose -f "$APPS_COMPOSE" down -v
 
     # 2. Prune the build cache (Forces docker to read local files fresh)
     echo "Pruning Docker builder cache..."
@@ -34,7 +35,8 @@ else
 
     # 1. Take down all app and infra containers completely (including volumes)
     echo "Removing containers and volumes (-v)..."
-    docker compose -f "$INFRA_COMPOSE" -f "$APPS_COMPOSE" down -v
+    docker compose -f "$INFRA_COMPOSE" down -v
+    docker compose -f "$APPS_COMPOSE" down -v
 
     # 2. Fire up the startup runner script clean
     if [ -f "./run.sh" ]; then

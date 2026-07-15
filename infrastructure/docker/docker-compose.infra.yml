@@ -12,9 +12,9 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ../../scripts:/docker-entrypoint-initdb.d
-      - ../../apps/identity/config:/docker-entrypoint-initdb.d/identity_db_seed.sql
     networks:
       - shared_network
+
   nats:
     image: nats:latest
     container_name: nats_main
