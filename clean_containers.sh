@@ -14,7 +14,7 @@ if [ "$1" = "--clean" ]; then
 
     # 1. Stop everything running
     echo "Stopping all containers..."
-    docker compose -f "$INFRA_COMPOSE" -f "$APPS_COMPOSE" down
+    docker compose -f "$INFRA_COMPOSE" -f "$APPS_COMPOSE" down -v
 
     # 2. Prune the build cache (Forces docker to read local files fresh)
     echo "Pruning Docker builder cache..."
@@ -26,8 +26,6 @@ if [ "$1" = "--clean" ]; then
 
     echo "✅ Deep clean complete!"
     ./run.sh
-    bash $SEED_DATABASE
-
 
 else
     echo "=========================================="
@@ -42,8 +40,6 @@ else
     if [ -f "./run.sh" ]; then
         echo "Starting fresh stack via ./run.sh..."
         chmod +x ./run.sh
-        ./run.sh
-        bash $SEED_DATABASE
 
     else
         echo "❌ Error: ./run.sh not found in the current directory!"
