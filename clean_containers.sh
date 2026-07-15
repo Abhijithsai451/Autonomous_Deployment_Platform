@@ -6,7 +6,7 @@ set -e
 # Configuration Paths
 INFRA_COMPOSE="infrastructure/docker/docker-compose.infra.yml"
 APPS_COMPOSE="infrastructure/docker/docker-compose.apps.yml"
-SEED_DATABASE="scripts/seed_database.sh"
+SEED_DATABASE="scripts/seed_databases.sh"
 if [ "$1" = "--clean" ]; then
     echo "=========================================="
     echo "🧹 RUNNING DEEP CLEAN..."
@@ -26,7 +26,7 @@ if [ "$1" = "--clean" ]; then
 
     echo "✅ Deep clean complete!"
     ./run.sh
-    BASH $SEED_DATABASE
+    bash $SEED_DATABASE
 
 
 else
@@ -43,8 +43,8 @@ else
         echo "Starting fresh stack via ./run.sh..."
         chmod +x ./run.sh
         ./run.sh
-        cd script
-        BASH $SEED_DATABASE
+        bash $SEED_DATABASE
+
     else
         echo "❌ Error: ./run.sh not found in the current directory!"
         exit 1
