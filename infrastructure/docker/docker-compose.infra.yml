@@ -1,7 +1,7 @@
 services:
   db:
     image: postgres:17
-    container_name: postgres_db
+    container_name: infra_pgdb
     restart: always
     environment:
       POSTGRES_USER: user
@@ -17,7 +17,7 @@ services:
 
   nats:
     image: nats:latest
-    container_name: nats_main
+    container_name: infra_nats
     restart: always
     ports:
       - "4222:4222"
@@ -30,7 +30,7 @@ services:
 
   keycloak:
     image: quay.io/keycloak/keycloak:24.0
-    container_name: cortexops_keycloak
+    container_name: infra_keycloak
     command: start-dev --import-realm
     ports:
       - "8080:8080"
@@ -53,7 +53,7 @@ services:
 
   cache:
     image: redis:7.2-alpine
-    container_name: redis_cache
+    container_name: infra_redis
     restart: always
     ports:
       - "6379:6379"
