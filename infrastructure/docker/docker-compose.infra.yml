@@ -37,6 +37,8 @@ services:
     volumes:
       - ../../apps/identity/config:/opt/keycloak/data/import
     environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres_db:5432/identity
       KC_DB_USERNAME: user

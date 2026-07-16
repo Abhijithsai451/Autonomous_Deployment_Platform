@@ -41,7 +41,7 @@ else
     # 2. Fire up the startup runner script clean
     if [ -f "./run.sh" ]; then
         echo "Starting fresh stack via ./run.sh..."
-        chmod +x ./run.sh
+        ./run.sh
 
     else
         echo "❌ Error: ./run.sh not found in the current directory!"
