@@ -3,8 +3,8 @@ from datetime import datetime
 from uuid import uuid4
 
 from sqlalchemy import Column, UUID, String, Enum, JSON, DateTime
-from sqlalchemy.orm import declarative_base, relationship
-
+from sqlalchemy.orm import  relationship
+from apps.identity.infrastructure.database import declarative_base
 Base = declarative_base()
 
 class OrgStatus(PyEnum):

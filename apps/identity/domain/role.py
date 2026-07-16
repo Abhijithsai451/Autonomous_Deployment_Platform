@@ -2,7 +2,9 @@ from datetime import datetime
 from uuid import uuid4
 
 from sqlalchemy import Column, UUID, ForeignKey, Boolean, String, DateTime, Table
-from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy.orm import relationship
+from apps.identity.infrastructure.database import declarative_base
+
 
 Base = declarative_base()
 role_permissions = Table(

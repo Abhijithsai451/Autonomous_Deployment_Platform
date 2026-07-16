@@ -1,10 +1,11 @@
 from datetime import datetime
 import enum
 from uuid import uuid4
-from apps.identity.domain.organization import Organization
 from sqlalchemy import Column, ForeignKey, String, Enum, DateTime, Table
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship, declarative_base
+from sqlalchemy.orm import relationship
+from apps.identity.infrastructure.database import declarative_base
+
 
 Base = declarative_base()
 

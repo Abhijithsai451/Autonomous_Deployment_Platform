@@ -1,7 +1,7 @@
 from uuid import uuid4
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy import Column, String
-from sqlalchemy.orm import declarative_base
+from apps.identity.infrastructure.database import declarative_base
 
 Base = declarative_base()
 class Permission(Base):
