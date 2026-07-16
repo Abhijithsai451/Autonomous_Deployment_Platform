@@ -3,10 +3,8 @@ from uuid import uuid4
 
 from sqlalchemy import Column, ForeignKey, DateTime, String
 from sqlalchemy.dialects.postgresql import UUID
-from apps.identity.infrastructure.database import declarative_base
+from apps.identity.infrastructure.database import Base
 
-
-Base = declarative_base()
 
 class ApiKey(Base):
     __tablename__ = "api_keys"

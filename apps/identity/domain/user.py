@@ -4,10 +4,7 @@ from uuid import uuid4
 from sqlalchemy import Column, ForeignKey, String, Enum, DateTime, Table
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-from apps.identity.infrastructure.database import declarative_base
-
-
-Base = declarative_base()
+from apps.identity.infrastructure.database import Base
 
 class UserStatus(enum.Enum):
     ACTIVE = "ACTIVE"

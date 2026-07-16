@@ -3,10 +3,8 @@ from uuid import uuid4
 
 from sqlalchemy import Column, UUID, ForeignKey, Boolean, String, DateTime, Table
 from sqlalchemy.orm import relationship
-from apps.identity.infrastructure.database import declarative_base
+from apps.identity.infrastructure.database import Base
 
-
-Base = declarative_base()
 role_permissions = Table(
     "role_permissions",
     Base.metadata,
