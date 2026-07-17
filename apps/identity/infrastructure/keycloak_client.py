@@ -1,5 +1,4 @@
 from keycloak import KeycloakOpenID, KeycloakAdmin
-
 from packages.config.settings import settings
 
 
