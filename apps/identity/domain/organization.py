@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from sqlalchemy import Column, UUID, String, Enum, JSON, DateTime
 from sqlalchemy.orm import  relationship
-from apps.identity.infrastructure.database import Base
+from apps.identity.infrastructure.base import Base
 
 class OrgStatus(PyEnum):
     ACTIVE = "ACTIVE"

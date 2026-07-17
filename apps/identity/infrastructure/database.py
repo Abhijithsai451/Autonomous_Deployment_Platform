@@ -12,5 +12,5 @@ def get_db_session():
     finally:
         db.close()
 
-Base = declarative_base()
+
 

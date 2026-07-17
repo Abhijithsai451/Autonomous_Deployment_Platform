@@ -28,6 +28,8 @@ if [ "$1" = "--clean" ]; then
     echo "✅ Deep clean complete!"
     ./run.sh
 
+elif [ "$1" = "--later" ]; then
+    echo "Pruning unused images..."
 else
     echo "=========================================="
     echo "🔄 RESETTING CONTAINERS & STARTING UP..."

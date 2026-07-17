@@ -40,7 +40,7 @@ services:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
       KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://postgres_db:5432/identity
+      KC_DB_URL: jdbc:postgresql://infra_pgdb:5432/identity
       KC_DB_USERNAME: user
       KC_DB_PASSWORD: password
       KEYCLOAK_ADMIN: admin

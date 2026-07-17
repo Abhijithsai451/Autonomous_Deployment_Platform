@@ -3,7 +3,7 @@ from uuid import uuid4
 
 from sqlalchemy import Column, ForeignKey, DateTime, String
 from sqlalchemy.dialects.postgresql import UUID
-from apps.identity.infrastructure.database import Base
+from apps.identity.infrastructure.base import Base
 
 class ServiceAccount(Base):
     __tablename__ = "service_accounts"
