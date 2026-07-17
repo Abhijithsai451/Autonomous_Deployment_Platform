@@ -1,13 +1,24 @@
 fastapi
-sqlalchemy
-pydantic-settings
-pydantic[email]
-nats-py
 uvicorn
 python-multipart
 psycopg2-binary>=2.9.0
+pydantic-settings
+pydantic[email]
+
+# Database
+sqlalchemy
+
+# Messaging
+nats-py
+
+# Observability & Evaluation
 opentelemetry-api
 opentelemetry-sdk
 python-keycloak
 opentelemetry-exporter-otlp-proto-grpc
 python-jose[cryptography]
+
+# Unit Testing
+pytest
+httpx
+pytest-asyncio

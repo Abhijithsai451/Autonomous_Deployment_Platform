@@ -34,6 +34,16 @@ async def lifespan(app: FastAPI):
 # Instantiate App Component
 app = FastAPI(title="CortexOps Identity Service", lifespan=lifespan)
 
+@app.api_route("/health",methods=["GET", "HEAD"], tags=["System"])
+async def health_check():
+    """
+    Service health check endpoint for monitoring, docker, and orchestration.
+    """
+    return {
+        "status": "healthy",
+        "service": "identity-service"
+    }
+
 app.include_router(auth.router)
 app.include_router(organizations.router)
 app.include_router(users.router)
