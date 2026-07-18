@@ -1,5 +1,6 @@
+from typing import Generator
 from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, Session
 
 
 class DatabaseClient:
@@ -12,8 +13,7 @@ class DatabaseClient:
 
         self.engine = create_engine(
             self.database_url,
-            connect_args = {"options": f"-c search_path = {self.schema_name}"},
-            pool_pre_ping = True
+            connect_args={"options": f"-c search_path={self.schema_name}"}
         )
 
         self.SessionLocal = sessionmaker(

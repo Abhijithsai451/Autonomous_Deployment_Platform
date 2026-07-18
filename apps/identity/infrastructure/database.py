@@ -6,4 +6,4 @@ db_client = DatabaseClient(
     schema_name = "identity"
 )
 
-get_db_session = db_client.get_session()
+get_db_session = db_client.get_session
