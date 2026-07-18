@@ -17,7 +17,6 @@ async def lifespan(app: FastAPI):
     logger.info("NATS Messaging Core successfully initialized.")
 
     # 2. Optional: Register any specific event listeners your service needs to audit/consume
-    # For example, if this service needs to listen to its own 'UserInvited' events:
     await EventBus.register_listener(
          stream="identity_events",
          subject="identity.userinvited",

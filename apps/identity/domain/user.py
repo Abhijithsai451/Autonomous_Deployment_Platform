@@ -18,6 +18,7 @@ user_roles = Table(
     Column("role_id", UUID(as_uuid=True), ForeignKey("identity.roles.id"), primary_key=True)
 )
 
+
 class User(Base):
     __tablename__ = "users"
     __table_args__ = {"schema" : "identity"}

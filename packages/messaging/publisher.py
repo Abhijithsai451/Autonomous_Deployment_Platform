@@ -4,7 +4,6 @@ import time
 from typing import Dict, Any, Callable, Awaitable
 
 import nats
-from nats.js.api import Header
 from opentelemetry import trace
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 
@@ -42,14 +41,15 @@ class Publisher:
 
         trace_headers = inject_trace_context()
 
-        nats_headers = Header()
-        nats_headers["Nats-Msg-Id"] = idempotency_key
+        nats_headers = {
+            "Nats-Msg-Id": idempotency_key
+        }
         for key, value in trace_headers.items():
             nats_headers[key] = value
 
         serialized_payload = json.dumps(envelope).encode("utf-8")
 
-        await self.jc.publish(
+        await self.js.publish(
             subject= subject,
             payload = serialized_payload,
             headers= nats_headers

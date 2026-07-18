@@ -81,3 +81,7 @@ class Subscriber:
                 )
             else:
                 raise e
+
+    async def close(self):
+        if self.nc:
+            await self.nc.close()

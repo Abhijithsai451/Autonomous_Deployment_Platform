@@ -1,5 +1,6 @@
 import uuid
 import logging
+from enum import Enum
 from typing import Dict, Any, Callable, Awaitable
 
 from packages.config.settings import settings
@@ -30,17 +31,21 @@ class EventBus:
             await cls._subscriber.connect()
 
     @classmethod
-    async def publish(cls, event_type: str, payload: Dict[str, Any]):
+    async def publish(cls, event_type: Any, payload: Dict[str, Any]):
         """Wraps the application service event into your exact telemetry-tracked publisher."""
         if not cls._publisher:
             await cls.initialize()
+        if isinstance(event_type, Enum):
+            event_name = event_type.name
+        else:
+            event_name = str(event_type)
 
-        subject = f"identity.{event_type.lower()}"
+        subject = f"identity.{event_name.lower()}"
         idempotency_key = str(uuid.uuid4())
 
         await cls._publisher.publish_event(
             subject=subject,
-            event_type=event_type,
+            event_type=event_name,
             payload=payload,
             idempotency_key=idempotency_key
         )

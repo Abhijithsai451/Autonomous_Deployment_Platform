@@ -8,10 +8,32 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from apps.identity.infrastructure.base import Base
 from apps.identity.identity_main import app
+from infrastructure.nats.nats_client import EventBus
 from packages.config.settings import settings
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 DATA = {}
+
+@pytest.mark.anyio
+async def test_force_nats_debug():
+    import nats
+    print(f"\n---> Attempting raw connection to: {settings.NATS_URL}")
+    try:
+        nc = await nats.connect(
+            settings.NATS_URL,
+            connect_timeout=2,
+            max_reconnect_attempts=1
+        )
+        print("---> SUCCESS: Connected to NATS broker!")
+        js = nc.jetstream()
+        await js.add_stream(name="test_debug", subjects=["test.*"])
+        await js.publish("test.event", b"hello")
+        print("---> SUCCESS: Event flushed over wire!")
+        await nc.close()
+    except Exception as e:
+        print(f"---> CRITICAL FAILURE: Could not talk to NATS: {e}")
+        raise e
+
 @pytest.fixture(scope="session", autouse=True)
 def setup_keycloak_test_data():
     """ Ensures the testing user exists inside the live Keycloak instance. """
@@ -100,9 +122,13 @@ def db_session(test_engine):
 
 @pytest.fixture
 async def client():
+    EventBus._publisher = None
+    EventBus._subscriber = None
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        yield ac
+        async with app.router.lifespan_context(app):
+            yield ac
+    await EventBus.shutdown()
 
 # ==========================================
 # AUTHENTICATION TESTS
@@ -292,3 +318,16 @@ async def test_api_keys_revoke(client):
     target_id = str(DATA.get("api_key_id", uuid.uuid4()))
     response = await client.delete(f"/api-keys/{target_id}")
     assert response.status_code in [200, 204, 404, 401, 422]
+
+
+@pytest.mark.anyio
+async def test_event_bus_publish(client):
+    print("\n---> Firing event directly through SDK...")
+    await EventBus.publish(
+        event_type="UserInvited",
+        payload={"id": "test-user-id", "email": "test@cortexops.io"},
+    )
+    print("---> SDK Event published!")
+
+
+#docker run --rm -it --network=cortexops_shared_network natsio/nats-box nats stream view identity_events --server=nats://infra_nats:4222
