@@ -6,7 +6,7 @@ services:
     environment:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
-      POSTGRES_DB: cortexops
+      POSTGRES_DB: default
     ports:
       - "5432:5432"
     volumes:
