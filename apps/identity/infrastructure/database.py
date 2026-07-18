@@ -1,16 +1,9 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
 from packages.config.settings import settings
+from packages.database.client import DatabaseClient
 
-engine = create_engine(settings.DATABASE_URL, pool_pre_ping=True)
-SessionLocal = sessionmaker(autocommit = False, autoflush = False, bind = engine)
+db_client = DatabaseClient(
+    database_url = settings.DATABASE_URL,
+    schema_name = "identity"
+)
 
-def get_db_session():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-
+get_db_session = db_client.get_session()
