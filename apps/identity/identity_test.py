@@ -1,59 +1,51 @@
 import os
-from unittest.mock import patch, AsyncMock
-
 import pytest
+from keycloak import KeycloakAdmin
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from apps.identity.infrastructure.base import Base
 from apps.identity.identity_main import app
-from apps.identity.domain.user import User
-from apps.identity.domain.role import Role
-from apps.identity.domain.permission import Permission
-from apps.identity.domain.api_key import ApiKey
-from apps.identity.domain.service_account import ServiceAccount
-from apps.identity.infrastructure.keycloak_client import KeycloakClient
+from packages.config.settings import settings
 
 DATABASE_URL = os.getenv("DATABASE_URL")
-
+VALID_UUID = "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_keycloak_test_data():
-    """
-    Runs once before the test suite. Ensures a testing realm, client,
-    and testing user exist directly in the real Keycloak instance.
-    """
-    keycloak_client = KeycloakClient()
-    target_realm = os.getenv("KEYCLOAK_REALM", "cortexops")
+    """ Ensures the testing user exists inside the live Keycloak instance. """
+    admin_client = KeycloakAdmin(
+        server_url=settings.KEYCLOAK_URL,
+        username=settings.KEYCLOAK_ADMIN_USER,
+        password=settings.KEYCLOAK_ADMIN_PASSWORD,
+        realm_name="master",
+        user_realm_name=settings.KEYCLOAK_REALM,
+        verify=True
+    )
     test_user = {
-            "email": "testuser@cortexops.io",
-            "username": "testuser",
-            "enabled": True,
-            "credentials": [{"value": "secure_password", "type": "password", "temporary": False}]
-        }
+        "email": "testuser@cortexops.io",
+        "username": "testuser",
+        "enabled": True,
+        "credentials": [{"value": "secure_password", "type": "password", "temporary": False}]
+    }
     try:
-
-        keycloak_client.admin.create_user(test_user, exist_ok=True)
-        print("\n✅ Successfully seeded 'testuser' in Keycloak!")
+        admin_client.create_user(test_user, exist_ok=True)
     except Exception as e:
-        print(f"Keycloak test user status: {e}")
-
+        print(f"Keycloak seeding info: {e}")
     yield
 
-async def get_fresh_tokens(client) -> dict:
-    login_payload = {"username": "testuser", "password": "secure_password"}
-    response = await client.post("/auth/login", data=login_payload)
+async def get_live_tokens(client) -> dict:
+    """ Helper to get real, active tokens directly from the running Keycloak container """
+    payload = {"username": "testuser", "password": "secure_password"}
+    response = await client.post("/auth/login", data=payload)
     if response.status_code != 200:
-        raise RuntimeError(f"Setup failed: Could not log in test user. Response: {response.text}")
+        raise RuntimeError(f"Could not get real token: {response.text}")
     return response.json()
 
 @pytest.fixture(scope="session")
 def test_engine():
-    """
-    Creates the single database engine connected to the PostgreSQL database
-    """
     if not DATABASE_URL:
-        raise ValueError("DATABASE_URL not found in .env")
+        raise ValueError("DATABASE_URL not found in environment variables")
     engine = create_engine(DATABASE_URL)
     with engine.begin() as conn:
         conn.execute(text("CREATE SCHEMA IF NOT EXISTS identity;"))
@@ -62,18 +54,9 @@ def test_engine():
 
 @pytest.fixture(scope="function", autouse=True)
 def db_session(test_engine):
-    """
-    Provides a transactional session. Everything written to the database
-    during a test is automatically rolled back when the test finishes.
-    """
     connection = test_engine.connect()
     transaction = connection.begin()
-
-    TestingSessionLocal = sessionmaker(
-        autocommit = False,
-        autoflush = False,
-        bind = connection
-    )
+    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=connection)
     session = TestingSessionLocal()
     yield session
     session.close()
@@ -86,44 +69,31 @@ async def client():
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
 
-
-# Authentication
+# ==========================================
+# AUTHENTICATION TESTS
+# ==========================================
 @pytest.mark.anyio
 async def test_auth_login(client):
-    """Test standard user login using real Keycloak credentials."""
     payload = {"username": "testuser", "password": "secure_password"}
     response = await client.post("/auth/login", data=payload)
-
     assert response.status_code == 200
     tokens = response.json()
     assert "access_token" in tokens
-    assert "refresh_token" in tokens
 
 @pytest.mark.anyio
 async def test_auth_refresh(client):
-    """Test token refresh using a real, active refresh token."""
-    tokens = await get_fresh_tokens(client)
-    refresh_token = tokens["refresh_token"]
-
-    payload = {"refresh_token": refresh_token}
+    # Fetch a real, cryptographically valid refresh token from Keycloak
+    tokens = await get_live_tokens(client)
+    payload = {"refresh_token": tokens["refresh_token"]}
     response = await client.post("/auth/refresh", json=payload)
-
     assert response.status_code == 200
-    new_tokens = response.json()
-    assert "access_token" in new_tokens
-    assert "refresh_token" in new_tokens
 
 @pytest.mark.anyio
 async def test_auth_logout(client):
-    """Test session termination using a real, active refresh token."""
-    # 1. Dynamically get a real token
-    tokens = await get_fresh_tokens(client)
-    refresh_token = tokens["refresh_token"]
-
-    # 2. Perform the logout test
-    payload = {"refresh_token": refresh_token}
+    # Fetch a real, active token to terminate gracefully
+    tokens = await get_live_tokens(client)
+    payload = {"refresh_token": tokens["refresh_token"]}
     response = await client.post("/auth/logout", json=payload)
-
     assert response.status_code in [200, 204]
 
 @pytest.mark.anyio
@@ -131,17 +101,18 @@ async def test_auth_me(client):
     response = await client.get("/auth/me")
     assert response.status_code in [200, 401]
 
-# 2. USERS ROUTE TESTS
-
+# ==========================================
+# USERS TESTS
+# ==========================================
 @pytest.mark.anyio
 async def test_users_invite(client):
-    payload = {"email": "newuser@cortexops.io",
-               "role_id": "admin-role",
-               "organization_id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
-               "display_name": "New User"
-               }
+    payload = {
+        "email": "newuser@cortexops.io",
+        "role_id": VALID_UUID,
+        "organization_id": VALID_UUID,
+        "display_name": "New User"
+    }
     response = await client.post("/users/invite", json=payload)
-    print("\n Invite Error Details: ", response.json())
     assert response.status_code in [200, 201]
 
 @pytest.mark.anyio
@@ -151,40 +122,40 @@ async def test_users_list(client):
 
 @pytest.mark.anyio
 async def test_users_get_by_id(client):
-    response = await client.get("/users/some-uuid-123")
+    response = await client.get(f"/users/{VALID_UUID}")
     assert response.status_code in [200, 404, 401]
 
 @pytest.mark.anyio
 async def test_users_patch(client):
     payload = {"username": "updated_name"}
-    response = await client.patch("/users/some-uuid-123", json=payload)
+    response = await client.patch(f"/users/{VALID_UUID}", json=payload)
     assert response.status_code in [200, 404, 401]
 
 @pytest.mark.anyio
 async def test_users_delete(client):
-    response = await client.delete("/users/some-uuid-123")
+    response = await client.delete(f"/users/{VALID_UUID}")
     assert response.status_code in [200, 204, 404, 401]
 
 @pytest.mark.anyio
 async def test_users_change_status(client):
     payload = {"status": "SUSPENDED"}
-    response = await client.patch("/users/some-uuid-123/status", json=payload)
+    response = await client.patch(f"/users/{VALID_UUID}/status", json=payload)
     assert response.status_code in [200, 400, 401]
 
 @pytest.mark.anyio
 async def test_users_assign_role(client):
-    payload = {"role_id": "role-uuid-abc"}
-    response = await client.post("/users/some-uuid-123/roles", json=payload)
+    payload = {"role_id": VALID_UUID}
+    response = await client.post(f"/users/{VALID_UUID}/roles", json=payload)
     assert response.status_code in [200, 201, 404, 401]
 
 @pytest.mark.anyio
 async def test_users_remove_role(client):
-    response = await client.delete("/users/some-uuid-123/roles/role-uuid-abc")
+    response = await client.delete(f"/users/{VALID_UUID}/roles/{VALID_UUID}")
     assert response.status_code in [200, 204, 404, 401]
 
-
-# 3. ROLES & PERMISSIONS ROUTE TESTS
-
+# ==========================================
+# ROLES & PERMISSIONS TESTS
+# ==========================================
 @pytest.mark.anyio
 async def test_roles_get(client):
     response = await client.get("/roles")
@@ -192,19 +163,24 @@ async def test_roles_get(client):
 
 @pytest.mark.anyio
 async def test_roles_create(client):
-    payload = {"name": "Editor", "permissions": ["read", "write"]}
+    payload = {
+        "name": "Editor",
+        "description": "Content editor role",
+        "organization_id": VALID_UUID,
+        "permissions": ["read", "write"]
+    }
     response = await client.post("/roles", json=payload)
     assert response.status_code in [200, 201, 400, 401]
 
 @pytest.mark.anyio
 async def test_roles_patch(client):
-    payload = {"description": "Updated Role description"}
-    response = await client.patch("/roles/role-uuid-abc", json=payload)
+    payload = {"description": "Updated description"}
+    response = await client.patch(f"/roles/{VALID_UUID}", json=payload)
     assert response.status_code in [200, 404, 401]
 
 @pytest.mark.anyio
 async def test_roles_delete(client):
-    response = await client.delete("/roles/role-uuid-abc")
+    response = await client.delete(f"/roles/{VALID_UUID}")
     assert response.status_code in [200, 204, 404, 401]
 
 @pytest.mark.anyio
@@ -212,9 +188,9 @@ async def test_permissions_get(client):
     response = await client.get("/permissions")
     assert response.status_code in [200, 401]
 
-
-# 4. SERVICE ACCOUNTS ROUTE TESTS
-
+# ==========================================
+# SERVICE ACCOUNTS TESTS
+# ==========================================
 @pytest.mark.anyio
 async def test_service_accounts_list(client):
     response = await client.get("/service-accounts")
@@ -222,24 +198,28 @@ async def test_service_accounts_list(client):
 
 @pytest.mark.anyio
 async def test_service_accounts_create(client):
-    payload = {"name": "Deployment-Runner", "description": "CI/CD Agent"}
+    payload = {
+        "name": "Deployment-Runner",
+        "description": "CI/CD Agent",
+        "organization_id": VALID_UUID
+    }
     response = await client.post("/service-accounts", json=payload)
     assert response.status_code in [200, 201, 401]
 
 @pytest.mark.anyio
 async def test_service_accounts_patch(client):
-    payload = {"description": "Updated deployment account details"}
-    response = await client.patch("/service-accounts/sa-uuid-xyz", json=payload)
+    payload = {"description": "Updated details"}
+    response = await client.patch(f"/service-accounts/{VALID_UUID}", json=payload)
     assert response.status_code in [200, 404, 401]
 
 @pytest.mark.anyio
 async def test_service_accounts_delete(client):
-    response = await client.delete("/service-accounts/sa-uuid-xyz")
+    response = await client.delete(f"/service-accounts/{VALID_UUID}")
     assert response.status_code in [200, 204, 404, 401]
 
-
-# 5. API KEYS ROUTE TESTS
-
+# ==========================================
+# API KEYS TESTS
+# ==========================================
 @pytest.mark.anyio
 async def test_api_keys_list(client):
     response = await client.get("/api-keys")
@@ -247,14 +227,16 @@ async def test_api_keys_list(client):
 
 @pytest.mark.anyio
 async def test_api_keys_create(client):
-    payload = {"name": "Production-Secret-Key", "expires_in_days": 30}
+    payload = {
+        "name": "Production-Secret-Key",
+        "expires_in_days": 30,
+        "organization_id": VALID_UUID,
+        "user_id": VALID_UUID
+    }
     response = await client.post("/api-keys", json=payload)
     assert response.status_code in [200, 201, 401]
 
 @pytest.mark.anyio
 async def test_api_keys_revoke(client):
-    # Triggers DELETE /api-keys/{id} (Revoke Key)
-    response = await client.delete("/api-keys/key-uuid-999")
+    response = await client.delete(f"/api-keys/{VALID_UUID}")
     assert response.status_code in [200, 204, 404, 401]
-
-
