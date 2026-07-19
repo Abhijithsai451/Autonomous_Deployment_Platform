@@ -13,6 +13,7 @@ class ApiKey(Base):
     service_account_id = Column(UUID(as_uuid=True), ForeignKey("identity.service_accounts.id"), nullable=True)
     name = Column(String(100), nullable=False)
     hashed_key = Column(String(255), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=True)
-    revoked_at = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    revoked_at = Column(DateTime(timezone=True),
+    nullable=True)

@@ -21,11 +21,15 @@ class Organization(Base):
     __table_args__ = {"schema": "identity"}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    name = Column(String(255), unique=True, nullable=False)
+    name = Column(String(255), nullable=False) # Removed unique restriction to match SQL migration
     slug = Column(String(100), unique=True, index=True, nullable=False)
-    status = Column(Enum(OrgStatus), default=OrgStatus.ACTIVE, nullable=False)
-    plan = Column(Enum(OrgPlan, native_enum=False), default=OrgPlan.FREE, nullable=False)
-    settings = Column(JSON, default={}, nullable=False)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
-    users = relationship("User", back_populates="organization", cascade = "all, delete-orphan")
+    # Bound explicitly to native Postgres enum types in the identity schema
+    status = Column(Enum(OrgStatus, name="org_status", schema="identity"), default=OrgStatus.ACTIVE, nullable=False)
+    plan = Column(Enum(OrgPlan, name="org_plan", schema="identity"), default=OrgPlan.FREE, nullable=False)
+
+    settings = Column(JSON, default={}, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    users = relationship("User", back_populates="organization", cascade="all, delete-orphan")

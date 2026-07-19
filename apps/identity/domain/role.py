@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import Column, UUID, ForeignKey, Boolean, String, DateTime, Table
+from sqlalchemy import Column, UUID, ForeignKey, Boolean, String, DateTime, Table, Text
 from sqlalchemy.orm import relationship
 from apps.identity.infrastructure.base import Base
 
@@ -19,9 +19,8 @@ class Role(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     organization_id = Column(UUID(as_uuid=True), ForeignKey("identity.organizations.id"), nullable=False)
     name = Column(String(100), nullable=False)
-    description = Column(String, nullable=True)
-    system_role = Column(Boolean, default=False)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-
+    description = Column(Text, nullable=True)
+    system_role = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow,nullable=False)
     permissions = relationship("Permission", secondary=role_permissions)
 
