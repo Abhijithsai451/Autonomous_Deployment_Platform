@@ -3,7 +3,7 @@ import logging
 from enum import Enum
 from typing import Dict, Any, Callable, Awaitable
 
-from packages.config.settings import settings
+from packages.config.settings import common_settings as settings
 from packages.messaging.publisher import Publisher
 from packages.messaging.subscriber import Subscriber
 

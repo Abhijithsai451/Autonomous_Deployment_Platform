@@ -2,11 +2,13 @@ services:
   identity:
     build:
       context: ../../
-      dockerfile: Dockerfile
+      dockerfile: infrastructure/docker/Dockerfile
     container_name: cortexops_identity
     ports:
       - "8000:8000"
     command: ["python", "-m", "uvicorn", "apps.identity.identity_main:app", "--host", "0.0.0.0", "--port", "8000"]
+    env_file:
+      - ../../.env
     environment:
       - IDENTITY_DATABASE_URL
       - KEYCLOAK_URL
@@ -27,6 +29,8 @@ services:
     ports:
       - "8001:8001"
     command: ["python", "-m", "uvicorn", "apps.organization.org_main:app", "--host", "0.0.0.0", "--port", "8001"]
+    env_file:
+      - ../../.env
     environment:
       - ORGANIZATION_DATABASE_URL
       - NATS_URL
