@@ -1,27 +1,25 @@
--- 1. Provision the independent database peer next to cortexops
+-- ========================================================
+-- DATABASE SETUP
+-- ========================================================
 CREATE DATABASE identity;
 
--- 2. Explicitly switch context to the new database
 \c identity;
 
--- 3. Create the isolated schema namespace
 CREATE SCHEMA IF NOT EXISTS identity;
 
--- 4. Enable extensions directly inside the schema context
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp" SCHEMA identity;
 
 -- ========================================================
--- 👑 ENUMS (Explicitly bound to the identity schema namespace)
+-- ENUMS
 -- ========================================================
 CREATE TYPE identity.org_status AS ENUM ('ACTIVE', 'SUSPENDED', 'ARCHIVED');
 CREATE TYPE identity.org_plan AS ENUM ('FREE', 'PRO', 'ENTERPRISE');
 CREATE TYPE identity.user_status AS ENUM ('ACTIVE', 'INVITED', 'DISABLED');
 
 -- ========================================================
--- 📊 TABLES (Explicitly created inside identity schema)
+-- TABLES
 -- ========================================================
 
--- Table: organizations
 CREATE TABLE identity.organizations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(255) NOT NULL,
@@ -33,7 +31,6 @@ CREATE TABLE identity.organizations (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Table: users
 CREATE TABLE identity.users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES identity.organizations(id) ON DELETE CASCADE,
@@ -50,7 +47,6 @@ CREATE TABLE identity.users (
     CONSTRAINT unique_org_user_email UNIQUE (organization_id, email)
 );
 
--- Table: roles
 CREATE TABLE identity.roles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES identity.organizations(id) ON DELETE CASCADE,
@@ -61,7 +57,6 @@ CREATE TABLE identity.roles (
     CONSTRAINT unique_org_role_name UNIQUE (organization_id, name)
 );
 
--- Table: permissions
 CREATE TABLE identity.permissions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(100) UNIQUE NOT NULL,
@@ -70,21 +65,18 @@ CREATE TABLE identity.permissions (
     action VARCHAR(50) NOT NULL
 );
 
--- Table: role_permissions
 CREATE TABLE identity.role_permissions (
     role_id UUID NOT NULL REFERENCES identity.roles(id) ON DELETE CASCADE,
     permission_id UUID NOT NULL REFERENCES identity.permissions(id) ON DELETE CASCADE,
     PRIMARY KEY (role_id, permission_id)
 );
 
--- Table: user_roles
 CREATE TABLE identity.user_roles (
     user_id UUID NOT NULL REFERENCES identity.users(id) ON DELETE CASCADE,
     role_id UUID NOT NULL REFERENCES identity.roles(id) ON DELETE CASCADE,
     PRIMARY KEY (user_id, role_id)
 );
 
--- Table: sessions
 CREATE TABLE identity.sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES identity.users(id) ON DELETE CASCADE,
@@ -97,7 +89,6 @@ CREATE TABLE identity.sessions (
     revoked_at TIMESTAMPTZ
 );
 
--- Table: service_accounts
 CREATE TABLE identity.service_accounts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES identity.organizations(id) ON DELETE CASCADE,
@@ -106,7 +97,6 @@ CREATE TABLE identity.service_accounts (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Table: api_keys
 CREATE TABLE identity.api_keys (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES identity.organizations(id) ON DELETE CASCADE,
@@ -129,11 +119,11 @@ CREATE INDEX idx_api_keys_hash ON identity.api_keys(hashed_key);
 CREATE INDEX idx_org_settings_gin ON identity.organizations USING gin(settings);
 
 -- ========================================================
--- 🌱 SEED DATA DATASEED BLOCK
+--  SEED DATA
 -- ========================================================
 BEGIN;
 
--- 1. SEED ORGANIZATIONS
+-- SEED ORGANIZATIONS
 WITH inserted_orgs_raw AS (
     INSERT INTO identity.organizations (name, slug, status, plan, settings) VALUES
     ('Enterprise Corp 1', 'enterprise-corp-1', 'ACTIVE', 'FREE', '{}'),
@@ -152,7 +142,7 @@ inserted_orgs AS (
     SELECT id, row_number() OVER (ORDER BY id) as rn FROM inserted_orgs_raw
 ),
 
--- 2. SEED USERS
+-- SEED USERS
 inserted_users_raw AS (
     INSERT INTO identity.users (organization_id, keycloak_user_id, email, display_name, status)
     SELECT id, gen_random_uuid(), 'user.' || rn || '@enterprisecorp.com', 'Developer User ' || rn, 'ACTIVE'::identity.user_status
@@ -163,7 +153,7 @@ inserted_users AS (
     SELECT id, organization_id, row_number() OVER (ORDER BY id) as rn FROM inserted_users_raw
 ),
 
--- 3. SEED ROLES (Populating planned description field)
+-- SEED ROLES (Populating planned description field)
 inserted_roles_raw AS (
     INSERT INTO identity.roles (organization_id, name, description, system_role)
     SELECT orgs.id, r_templates.name, r_templates.description, r_templates.sys_role
@@ -178,7 +168,7 @@ inserted_roles AS (
     SELECT id, organization_id, name, row_number() OVER (ORDER BY id) as rn FROM inserted_roles_raw
 ),
 
--- 4. SEED PERMISSIONS (Populating planned description field)
+-- SEED PERMISSIONS (Populating planned description field)
 inserted_permissions_raw AS (
     INSERT INTO identity.permissions (name, description, resource, action) VALUES
     ('identity.read', 'Allows reading identities, groups, and scopes', 'identity', 'read'),
@@ -197,7 +187,7 @@ inserted_permissions AS (
     SELECT id, name, row_number() OVER (ORDER BY id) as rn FROM inserted_permissions_raw
 ),
 
--- 5. SEED ROLE_PERMISSIONS
+--  SEED ROLE_PERMISSIONS
 inserted_role_perms AS (
     INSERT INTO identity.role_permissions (role_id, permission_id)
     SELECT r.id, p.id FROM inserted_roles r
@@ -206,7 +196,7 @@ inserted_role_perms AS (
     RETURNING role_id
 ),
 
--- 6. SEED USER_ROLES
+--  SEED USER_ROLES
 inserted_user_roles AS (
     INSERT INTO identity.user_roles (user_id, role_id)
     SELECT u.id, r.id FROM inserted_users u
@@ -215,7 +205,7 @@ inserted_user_roles AS (
     RETURNING user_id
 ),
 
--- 7. SEED SESSIONS
+--  SEED SESSIONS
 inserted_sessions AS (
     INSERT INTO identity.sessions (user_id, device_name, ip_address, user_agent, metadata, expires_at)
     SELECT id, 'Chrome Mac / Dev Instance', '127.0.0.1'::inet, 'Mozilla/5.0 PyTest/Runner', '{"agent": "seed-script"}'::jsonb, NOW() + INTERVAL '24 hours'
@@ -223,7 +213,7 @@ inserted_sessions AS (
     RETURNING id
 ),
 
--- 8. SEED SERVICE_ACCOUNTS
+--  SEED SERVICE_ACCOUNTS
 inserted_service_accounts AS (
     INSERT INTO identity.service_accounts (organization_id, client_id, description)
     SELECT id, 'sa-client-id-00' || rn, 'Automated CI/CD account for organization'
@@ -231,7 +221,7 @@ inserted_service_accounts AS (
     RETURNING id, organization_id
 )
 
--- 9. SEED API_KEYS (Populating planned name and revoked_at properties cleanly)
+--  SEED API_KEYS (Populating planned name and revoked_at properties cleanly)
 INSERT INTO identity.api_keys (organization_id, service_account_id, name, hashed_key, expires_at, revoked_at)
 SELECT organization_id, id, 'Default CI Key', 'mocked_argon2_or_sha256_hash_value_string_' || row_number() OVER (), NOW() + INTERVAL '365 days', NULL
 FROM inserted_service_accounts;
