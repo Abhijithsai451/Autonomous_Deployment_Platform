@@ -14,13 +14,12 @@ class OrgStatus(PyEnum):
     ARCHIVED = "ARCHIVED"
 
 class OrgPlan(PyEnum):
-    INTERNAL = "INTERNAL"
-    EXTERNAL = "EXTERNAL"
-    SRE = "SRE"
-    SUPPORT = "SUPPORT"
+    FREE = "FREE"
+    PRO = "PRO"
+    ENTERPRISE = "ENTERPRISE"
 
 class Organization(Base):
-    __tablename_ = "organizations"
+    __tablename__ = "organizations"
     __table_args__ = {"schema": "organization"}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default= uuid4)
@@ -36,8 +35,8 @@ class Organization(Base):
     created_at = Column(DateTime(timezone=True), default = datetime.utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
-    projects = relationship("Project", back_populates = "organization", cascade="all, delete-orphan")
-    departments = relationship("Department", back_populates = "organization", cascade="all, delete-orphan")
+    projects = relationship("Projects", back_populates = "organizations", cascade="all, delete-orphan")
+    departments = relationship("Departments", back_populates = "organization", cascade="all, delete-orphan")
 
 
 
