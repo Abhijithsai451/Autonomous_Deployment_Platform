@@ -21,10 +21,9 @@ class Organization(Base):
     __table_args__ = {"schema": "identity"}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    name = Column(String(255), nullable=False) # Removed unique restriction to match SQL migration
+    name = Column(String(255), nullable=False)
     slug = Column(String(100), unique=True, index=True, nullable=False)
 
-    # Bound explicitly to native Postgres enum types in the identity schema
     status = Column(Enum(OrgStatus, name="org_status", schema="identity"), default=OrgStatus.ACTIVE, nullable=False)
     plan = Column(Enum(OrgPlan, name="org_plan", schema="identity"), default=OrgPlan.FREE, nullable=False)
 

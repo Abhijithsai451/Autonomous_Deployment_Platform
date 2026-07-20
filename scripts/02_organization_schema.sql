@@ -4,7 +4,6 @@
 CREATE DATABASE organization;
 \c organization;
 
-
 CREATE SCHEMA IF NOT EXISTS organization;
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp" SCHEMA organization;
@@ -12,9 +11,9 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp" SCHEMA organization;
 -- ========================================================
 -- ENUMS
 -- ========================================================
-CREATE TYPE organization.org_status AS ENUM ('ACTIVE', 'SUSPENDED','ARCHIVED')
-CREATE TYPE organization.org_plan AS ENUM ('FREE', 'PRO','ENTERPRISE')
-CREATE TYPE organization.department_type AS ENUM ('INTERNAL','EXTERNAL', 'SRE', 'SUPPORT')
+CREATE TYPE organization.org_status AS ENUM ('ACTIVE', 'SUSPENDED','ARCHIVED');
+CREATE TYPE organization.org_plan AS ENUM ('FREE', 'PRO','ENTERPRISE');
+CREATE TYPE organization.department_type AS ENUM ('INTERNAL','EXTERNAL', 'SRE', 'SUPPORT');
 
 CREATE TABLE IF NOT EXISTS organization.organizations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -38,8 +37,8 @@ CREATE TABLE IF NOT EXISTS organization.projects (
     description TEXT,
     lifecycle VARCHAR(255) NOT NULL DEFAULT 'ACTIVE',
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-    created_at TIMESTAMPZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPZ NOT NULL DEFAULT NOW()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS organization.departments (
@@ -49,8 +48,8 @@ CREATE TABLE IF NOT EXISTS organization.departments (
     type organization.department_type NOT NULL DEFAULT 'INTERNAL',
     description TEXT,
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-    create_at TIMESTAMPZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPZ NOT NULL DEFAULT NOW()
+    create_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 -- ========================================================
 --  PERFORMANCE INDEXES

@@ -24,7 +24,7 @@ class StructuredLogger:
         Forwards standard Library log statements cleanly into stdout streams
         """
         logging.basicConfig(
-            format= "%(message)",
+            format= "%(message)s",
             stream = sys.stdout,
             level = self._log_level
         )
