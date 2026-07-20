@@ -18,6 +18,3 @@ class ProjectService:
         await EventBus.publish("ProjectCreated", {"id": str(project.id), "description":str(project.description)})
         return project
 
-    async def update_project_status(self, project_id:UUID, status: str):
-        project = self.db.query(Project).where(Project.id == str(project_id)).first()
-        if project:
