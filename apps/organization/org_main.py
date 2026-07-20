@@ -10,6 +10,7 @@ log_manager = StructuredLogger(
 
 logger = log_manager.get_logger()
 
+
 app = FastAPI()
 
 @app.on_event("startup")
