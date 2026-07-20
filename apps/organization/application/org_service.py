@@ -25,6 +25,7 @@ class OrganizationService:
             for k, v in updates.items():
                 setattr(org, k, v)
             self.db.commit()
+            self.db.refresh(org)
             await EventBus.publish("OrganizationUpdated", {"id": str(org.id)})
         return org
 
@@ -33,21 +34,24 @@ class OrganizationService:
         if org:
             org.status = OrgStatus(status)
             if org.status == OrgStatus.ACTIVE:
+                self.db.commit()
                 await EventBus.publish("OrganizationUpdated", {"id": str(org.id), "status": "ACTIVE"})
             if org.status == OrgStatus.ARCHIVED:
+                self.db.commit()
                 await EventBus.publish("OrganizationUpdated", {"id": str(org.id),"status": "ARCHIVED"})
         else:
             await EventBus.publish("OrganizationNotFound", {"id": str(org.id)})
             raise HTTPException(status_code=404, detail=f"Organization not found with id {org_id}")
 
-    async def suspend_organization(self, org_id:UUID)-> Organization:
+    async def suspend_organization(self, org_id:UUID):
         org = self.db.query(Organization).where(Organization.id == str(org_id)).first()
         if not org:
             await EventBus.publish("OrganizationNotFound", {"id": str(org.id)})
             raise HTTPException(status_code=404, detail="Organization not found")
 
-        org.status = OrgStatus.SUSPENDED
-        if org.status == OrgStatus.ACTIVE:
+        if org:
+            org.status = OrgStatus.SUSPENDED
+            self.db.commit()
             await EventBus.publish("OrganizationSuspended", {"id": str(org.id), "status": "SUSPENDED"})
 
 
