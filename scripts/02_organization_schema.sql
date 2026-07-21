@@ -14,6 +14,8 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp" SCHEMA organization;
 CREATE TYPE organization.org_status AS ENUM ('ACTIVE', 'SUSPENDED','ARCHIVED');
 CREATE TYPE organization.org_plan AS ENUM ('FREE', 'PRO','ENTERPRISE');
 CREATE TYPE organization.department_type AS ENUM ('INTERNAL','EXTERNAL', 'SRE', 'SUPPORT');
+CREATE TYPE organization.project_status AS ENUM ('CREATED', 'UPDATED', 'DELETED', 'ARCHIVED');
+CREATE TYPE organization.department_status AS ENUM ('CREATED', 'UPDATED', 'DELETED', 'ARCHIVED');
 
 CREATE TABLE IF NOT EXISTS organization.organizations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -36,6 +38,7 @@ CREATE TABLE IF NOT EXISTS organization.projects (
     name VARCHAR(255) NOT NULL,
     description TEXT,
     lifecycle VARCHAR(255) NOT NULL DEFAULT 'ACTIVE',
+    status organization.project_status NOT NULL DEFAULT 'CREATED',
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -46,21 +49,25 @@ CREATE TABLE IF NOT EXISTS organization.departments (
     organization_id UUID NOT NULL REFERENCES organization.organizations(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     type organization.department_type NOT NULL DEFAULT 'INTERNAL',
+    status organization.department_status NOT NULL DEFAULT 'CREATED',
     description TEXT,
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-    create_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 -- ========================================================
 --  PERFORMANCE INDEXES
 -- ========================================================
 
+CREATE INDEX IF NOT EXISTS idx_organizations_slug ON organization.organizations(slug);
 CREATE INDEX IF NOT EXISTS idx_projects_organization_id ON organization.projects(organization_id);
 CREATE INDEX IF NOT EXISTS idx_departments_organization_id ON organization.departments(organization_id);
 CREATE INDEX IF NOT EXISTS idx_projects_lifecycle ON organization.projects(lifecycle);
-CREATE INDEX IF NOT EXISTS idx_organizations_general_settings_gin ON organization.organizations(general_settings);
-CREATE INDEX IF NOT EXISTS idx_projects_metadata_gin ON organization.projects(metadata);
-CREATE INDEX IF NOT EXISTS idx_departments_metadata_gin ON organization.departments(metadata);
+CREATE INDEX IF NOT EXISTS idx_projects_status ON organization.projects(status);
+CREATE INDEX IF NOT EXISTS idx_departments_status ON organization.departments(status);
+CREATE INDEX IF NOT EXISTS idx_organizations_general_settings_gin ON organization.organizations USING gin(general_settings);
+CREATE INDEX IF NOT EXISTS idx_projects_metadata_gin ON organization.projects USING gin(metadata);
+CREATE INDEX IF NOT EXISTS idx_departments_metadata_gin ON organization.departments USING gin(metadata);
 
 -- ========================================================
 --  SEED DATA
@@ -106,14 +113,15 @@ VALUES
     '{"currency": "USD", "payment_method": "none", "billing_email": "alfred@wayne.com"}'
 );
 
--- Seed Projects
-INSERT INTO organization.projects (organization_id, name, description, lifecycle, metadata)
+-- Seed Projects (Includes status column)
+INSERT INTO organization.projects (organization_id, name, description, lifecycle, status, metadata)
 VALUES
 (
     'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d',
     'Project Phoenix',
     'Migration of legacy monolithic systems to cloud-native microservices.',
     'ACTIVE',
+    'CREATED',
     '{"repository": "github.com/acme/phoenix", "lead_engineer": "Alice", "priority": "high"}'::jsonb
 ),
 (
@@ -121,6 +129,7 @@ VALUES
     'Project Icarus',
     'Experimental research into edge-computing processing times.',
     'PLANNING',
+    'CREATED',
     '{"repository": "github.com/acme/icarus", "target_quarter": "Q4", "budget_code": "R-D-99"}'::jsonb
 ),
 (
@@ -128,16 +137,18 @@ VALUES
     'Friday AI Expansion',
     'Upgrading internal infrastructure for localized LLM instances.',
     'ACTIVE',
+    'CREATED',
     '{"repository": "gitlab.stark.internal/friday", "compute_cluster": "JARVIS-04"}'::jsonb
 );
 
--- Seed Departments
-INSERT INTO organization.departments (organization_id, name, type, description, metadata)
+-- Seed Departments (Includes status column)
+INSERT INTO organization.departments (organization_id, name, type, status, description, metadata)
 VALUES
 (
     'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d',
     'Core Reliability Engineering',
     'SRE',
+    'CREATED',
     'Responsible for uptime, infrastructure provisioning, and CI/CD pipelines.',
     '{"cost_center": "CC-401", "headcount_target": 12, "slack_channel": "#eng-sre"}'::jsonb
 ),
@@ -145,6 +156,7 @@ VALUES
     'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d',
     'Global Customer Care',
     'SUPPORT',
+    'CREATED',
     'Tier 1 to Tier 3 technical support for enterprise contract holders.',
     '{"cost_center": "CC-902", "coverage": "24/7/365", "system": "Zendesk"}'::jsonb
 ),
@@ -152,6 +164,9 @@ VALUES
     'b2c3d4e5-f6a7-8b9c-0d1e-2f3a4b5c6d7e',
     'Advanced Weapons Division',
     'INTERNAL',
+    'CREATED',
     'Internal design group focusing on clean energy defense systems.',
     '{"clearance_level": "Level 5", "location": "Malibu Lab"}'::jsonb
 );
+
+COMMIT;
