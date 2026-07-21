@@ -74,99 +74,38 @@ CREATE INDEX IF NOT EXISTS idx_departments_metadata_gin ON organization.departme
 -- ========================================================
 BEGIN;
 
-INSERT INTO organization.organizations (id, name, slug, status, plan, general_settings, security_settings, llm_settings, notification_settings, billing_settings)
-VALUES
-(
-    'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d',
-    'Acme Global',
-    'acme-global',
-    'ACTIVE',
-    'ENTERPRISE',
-    '{"timezone": "America/New_York", "language": "en"}'::jsonb,
-    '{"mfa_required": true, "ip_whitelist": ["192.168.1.1", "10.0.0.1"]}',
-    '{"model": "gpt-4o", "temperature": 0.7, "max_tokens": 2048}',
-    '{"email": true, "slack": true, "sms": false}',
-    '{"currency": "USD", "payment_method": "wire", "billing_email": "finance@acme.com"}'
-),
-(
-    'b2c3d4e5-f6a7-8b9c-0d1e-2f3a4b5c6d7e',
-    'Stark Industries',
-    'stark-industries',
-    'ACTIVE',
-    'PRO',
-    '{"timezone": "Europe/London", "language": "en"}'::jsonb,
-    '{"mfa_required": true, "ip_whitelist": []}',
-    '{"model": "claude-3-5-sonnet", "temperature": 0.2, "max_tokens": 4096}',
-    '{"email": true, "slack": false, "sms": false}',
-    '{"currency": "GBP", "payment_method": "credit_card", "billing_email": "pepper@stark.com"}'
-),
-(
-    'c3d4e5f6-a7b8-9c0d-1e2f-3a4b5c6d7e8f',
-    'Wayne Enterprises',
-    'wayne-enterprises',
-    'SUSPENDED',
-    'FREE',
-    '{"timezone": "America/Gotham", "language": "en"}'::jsonb,
-    '{"mfa_required": false, "ip_whitelist": []}',
-    '{"model": "llama-3", "temperature": 0.5, "max_tokens": 1024}',
-    '{"email": false, "slack": false, "sms": false}',
-    '{"currency": "USD", "payment_method": "none", "billing_email": "alfred@wayne.com"}'
-);
+-- 1. Insert 15 more Organizations
+INSERT INTO organization.organizations (name, slug, status, plan, general_settings, security_settings)
+SELECT
+    'Corp ' || i as name,
+    'corp-' || i as slug,
+    (ARRAY['ACTIVE', 'SUSPENDED', 'ARCHIVED'])[floor(random() * 3 + 1)]::organization.org_status,
+    (ARRAY['FREE', 'PRO', 'ENTERPRISE'])[floor(random() * 3 + 1)]::organization.org_plan,
+    jsonb_build_object('timezone', 'UTC', 'language', 'en'),
+    jsonb_build_object('mfa_required', random() > 0.5)
+FROM generate_series(1, 15) i;
 
--- Seed Projects (Includes status column)
+-- 2. Insert 15 more Projects
+-- We'll pick a random organization_id from the existing ones for each project
 INSERT INTO organization.projects (organization_id, name, description, lifecycle, status, metadata)
-VALUES
-(
-    'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d',
-    'Project Phoenix',
-    'Migration of legacy monolithic systems to cloud-native microservices.',
-    'ACTIVE',
-    'CREATED',
-    '{"repository": "github.com/acme/phoenix", "lead_engineer": "Alice", "priority": "high"}'::jsonb
-),
-(
-    'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d',
-    'Project Icarus',
-    'Experimental research into edge-computing processing times.',
-    'PLANNING',
-    'CREATED',
-    '{"repository": "github.com/acme/icarus", "target_quarter": "Q4", "budget_code": "R-D-99"}'::jsonb
-),
-(
-    'b2c3d4e5-f6a7-8b9c-0d1e-2f3a4b5c6d7e',
-    'Friday AI Expansion',
-    'Upgrading internal infrastructure for localized LLM instances.',
-    'ACTIVE',
-    'CREATED',
-    '{"repository": "gitlab.stark.internal/friday", "compute_cluster": "JARVIS-04"}'::jsonb
-);
+SELECT
+    (SELECT id FROM organization.organizations ORDER BY random() LIMIT 1),
+    'Project ' || chr((65 + (i % 26))::int) || i,
+    'Automated description for project ' || i,
+    (ARRAY['ACTIVE', 'PLANNING', 'COMPLETED'])[floor(random() * 3 + 1)],
+    (ARRAY['CREATED', 'UPDATED', 'ARCHIVED'])[floor(random() * 3 + 1)]::organization.project_status,
+    jsonb_build_object('priority', floor(random() * 5 + 1), 'version', '1.' || i)
+FROM generate_series(1, 15) i;
 
--- Seed Departments (Includes status column)
+-- 3. Insert 15 more Departments
 INSERT INTO organization.departments (organization_id, name, type, status, description, metadata)
-VALUES
-(
-    'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d',
-    'Core Reliability Engineering',
-    'SRE',
-    'CREATED',
-    'Responsible for uptime, infrastructure provisioning, and CI/CD pipelines.',
-    '{"cost_center": "CC-401", "headcount_target": 12, "slack_channel": "#eng-sre"}'::jsonb
-),
-(
-    'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d',
-    'Global Customer Care',
-    'SUPPORT',
-    'CREATED',
-    'Tier 1 to Tier 3 technical support for enterprise contract holders.',
-    '{"cost_center": "CC-902", "coverage": "24/7/365", "system": "Zendesk"}'::jsonb
-),
-(
-    'b2c3d4e5-f6a7-8b9c-0d1e-2f3a4b5c6d7e',
-    'Advanced Weapons Division',
-    'INTERNAL',
-    'CREATED',
-    'Internal design group focusing on clean energy defense systems.',
-    '{"clearance_level": "Level 5", "location": "Malibu Lab"}'::jsonb
-);
+SELECT
+    (SELECT id FROM organization.organizations ORDER BY random() LIMIT 1),
+    (ARRAY['Engineering', 'Marketing', 'Sales', 'HR', 'Legal', 'Product'])[floor(random() * 6 + 1)] || ' ' || i,
+    (ARRAY['INTERNAL', 'EXTERNAL', 'SRE', 'SUPPORT'])[floor(random() * 4 + 1)]::organization.department_type,
+    (ARRAY['CREATED', 'UPDATED'])[floor(random() * 2 + 1)]::organization.department_status,
+    'Department focusing on scale and efficiency.',
+    jsonb_build_object('budget_code', 'DEPT-' || (100 + i))
+FROM generate_series(1, 15) i;
 
 COMMIT;
