@@ -12,7 +12,7 @@ class DepartmentType(PyEnum):
     SRE = "SRE"
     SUPPORT = "SUPPORT"
 
-class Departments(Base):
+class Department(Base):
     __tablename__ = "departments"
     __table_args__ = {"schema":"departments"}
 

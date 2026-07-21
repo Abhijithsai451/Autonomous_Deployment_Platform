@@ -11,8 +11,8 @@ class OrganizationService:
     def __init__(self, db:Session):
         self.db = db
 
-    async def create_organization(self, name: str, slug: str, plan: str)-> Organization:
-        org = Organization(name= name, slug = slug, plan= plan)
+    async def create_organization(self, name: str, slug: str)-> Organization:
+        org = Organization(name= name, slug = slug)
         self.db.add(org)
         self.db.commit()
         self.db.refresh(org)
