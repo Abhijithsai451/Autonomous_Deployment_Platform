@@ -1,6 +1,5 @@
 from keycloak import KeycloakOpenID, KeycloakAdmin
-from packages.config.settings import settings
-
+from apps.identity.config.identity_settings import identity_settings as settings
 
 class KeycloakClient:
     def __init__(self):

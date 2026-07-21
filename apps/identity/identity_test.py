@@ -9,7 +9,7 @@ from apps.identity.infrastructure.base import Base
 from apps.identity.identity_main import app
 from apps.identity.infrastructure.database import db_client
 from infrastructure.nats.nats_client import EventBus
-from packages.config.settings import settings
+from apps.identity.config.identity_settings import identity_settings as settings
 import nats
 
 DATA = {}

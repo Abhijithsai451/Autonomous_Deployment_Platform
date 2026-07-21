@@ -28,7 +28,7 @@ def get_org(id: UUID, db: Session = Depends(get_db_session)):
     if not org: raise HTTPException(status_code=404, detail = "Organization Not Found")
     return org
 
-@router.patch("/{id")
+@router.patch("/{id}")
 async def patch_org(id: UUID, payload: dict, db: Session = Depends(get_db_session)):
     svc = IdentityService(db, KeycloakClient())
     return await svc.update_organization(id, payload)
