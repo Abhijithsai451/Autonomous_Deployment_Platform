@@ -11,8 +11,8 @@ class ProjectService:
     def __init__(self, db:Session):
         self.db = db
 
-    async def create_projects(self,name: str, description: str, lifecycle: str )-> Project :
-        project = Project(name=name, description=description, lifecycle=lifecycle)
+    async def create_projects(self,org_id: UUID,name: str, description: str, lifecycle: str )-> Project :
+        project = Project(organization_id=org_id, name=name, description=description, lifecycle=lifecycle)
         self.db.add(project)
         self.db.commit()
         self.db.refresh(project)
@@ -23,7 +23,9 @@ class ProjectService:
         project = self.db.query(Project).where(Project.id == str(project_id)).first()
         if project:
             for k,v in updates.items():
-                setattr(project, k,v)
+                attr_name = "project_metadata" if k == "metadata" else k
+                if hasattr(project, attr_name):
+                    setattr(project, attr_name, v)
             self.db.commit()
             self.db.refresh(project)
             await EventBus.publish("ProjectDataUpdated", {"id": str(project.id)})

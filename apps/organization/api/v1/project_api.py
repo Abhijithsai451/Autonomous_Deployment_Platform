@@ -11,6 +11,7 @@ from apps.organization.infrastructure.database import org_db_session
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
 class CreateProjectSchema(BaseModel):
+    organization_id: UUID
     name: str
     description: str
     lifecycle: str = "ACTIVE"
@@ -21,7 +22,12 @@ class StatusUpdateSchema(BaseModel):
 @router.post("")
 async def create_project(payload: CreateProjectSchema, db: Session = Depends(org_db_session)):
     svc = ProjectService(db)
-    return await svc.create_projects(payload.name, payload.description, payload.lifecycle)
+    return await svc.create_projects(
+        org_id=payload.organization_id,
+        name=payload.name,
+        description=payload.description,
+        lifecycle=payload.lifecycle
+    )
 
 @router.get("")
 def list_projects(db: Session = Depends(org_db_session)):

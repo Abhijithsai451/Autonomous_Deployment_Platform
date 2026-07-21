@@ -24,9 +24,9 @@ async def organization_lifespan(app: FastAPI):
 
     # 2. Optional: Register any specific event listeners your service needs to audit/consume
     await EventBus.register_listener(
-        stream="identity_events",
-        subject="identity.userinvited",
-        durable_name="identity-service-user-invited-worker",
+        stream="organization_events",
+        subject="organization.UserInvited",
+        durable_name="organization-service-user-invited-worker",
         handler=example_organization_logging_handler
         )
     yield

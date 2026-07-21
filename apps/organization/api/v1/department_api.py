@@ -11,6 +11,7 @@ from apps.organization.infrastructure.database import org_db_session
 router = APIRouter(prefix="/departments", tags=["Departments"])
 
 class CreateDepartmentSchema(BaseModel):
+    organization_id: UUID
     name: str
     description: str
     type: str
@@ -21,7 +22,12 @@ class StatusUpdateSchema(BaseModel):
 @router.post("")
 async def create_department(payload: CreateDepartmentSchema, db: Session = Depends(org_db_session)):
     svc = DepartmentService(db)
-    return await svc.create_department(payload.name, payload.description, payload.type)
+    return await svc.create_department(
+        org_id=payload.organization_id,
+        name=payload.name,
+        description=payload.description,
+        type=payload.type
+    )
 
 @router.get("")
 def list_departments(db: Session = Depends(org_db_session)):

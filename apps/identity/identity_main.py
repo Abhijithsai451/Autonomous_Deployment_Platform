@@ -1,10 +1,16 @@
-import logging
+from packages.logging.structured_logs import StructuredLogger
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from apps.identity.api.v1 import auth, organizations, users, roles_permissions, service_accounts, api_keys
 from infrastructure.nats.nats_client import EventBus
 
-logger = logging.getLogger("identity.main")
+log_manager = StructuredLogger(
+    service_name="cortexops-identity",
+    level= "INFO",
+    initial_context = {"env": "production"}
+)
+
+logger = log_manager.get_logger()
 
 # Example background handler for testing/listening to events if needed
 async def example_identity_logging_handler(payload: dict, metadata: dict):
@@ -19,7 +25,7 @@ async def identity_lifespan(app: FastAPI):
     # 2. Optional: Register any specific event listeners your service needs to audit/consume
     await EventBus.register_listener(
          stream="identity_events",
-         subject="identity.userinvited",
+         subject="identity.UserInvited",
          durable_name="identity-service-user-invited-worker",
          handler=example_identity_logging_handler
      )

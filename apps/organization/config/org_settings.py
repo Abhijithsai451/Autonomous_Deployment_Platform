@@ -15,4 +15,4 @@ class Settings(BaseSettings):
         extra = "ignore"
     )
 
-identity_settings = Settings()
+org_settings = Settings()

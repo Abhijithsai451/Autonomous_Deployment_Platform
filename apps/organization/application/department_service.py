@@ -9,8 +9,8 @@ from infrastructure.nats.nats_client import EventBus
 class DepartmentService:
     def __init__(self, db:Session):
         self.db = db
-    async def create_department(self, name: str, description: str, type: str) -> Department:
-        department = Department(name=name, description=description,type = type )
+    async def create_department(self, org_id: UUID, name: str, description: str, type: str) -> Department:
+        department = Department(organization_id=org_id, name=name, description=description, type=type)
         self.db.add(department)
         self.db.commit()
         self.db.refresh(department)
@@ -21,7 +21,9 @@ class DepartmentService:
         department = self.db.query(Department).where(Department.id == str(department_id)).first()
         if department:
             for k,v in updates.items():
-                setattr(department, k,v)
+                attr_name = "department_metadata" if k == "metadata" else k
+                if hasattr(department, attr_name):
+                    setattr(department, attr_name, v)
             self.db.commit()
             self.db.refresh(department)
             await EventBus.publish("DepartmentDataUpdated", {"id":str(department.id)})

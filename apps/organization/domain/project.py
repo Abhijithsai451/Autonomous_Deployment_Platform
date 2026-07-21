@@ -1,7 +1,8 @@
-import datetime
+from datetime import datetime
 from uuid import uuid4
 from enum import Enum as PyEnum
-from sqlalchemy import Column, UUID, ForeignKey, String, Text, JSON, DateTime, Enum
+from sqlalchemy import Column, ForeignKey, String, Text, JSON, DateTime, Enum
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 class ProjectStatus(PyEnum):
@@ -21,11 +22,11 @@ class Project(Base):
     description = Column(Text, nullable = True)
     lifecycle = Column(String(255),default = "ACTIVE", nullable = False)
     status = Column(Enum(ProjectStatus, name="project_status",schema="organization"), default = ProjectStatus.CREATED, nullable=False)
-    metadata = Column(JSON, default={}, nullable=False)
+    project_metadata = Column("metadata", JSON, default={}, nullable=False)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
-    organization = relationship("organizations",back_populates="projects")
+    organization = relationship("Organization",back_populates="projects")
 
 
 

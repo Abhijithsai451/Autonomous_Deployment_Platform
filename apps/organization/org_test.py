@@ -45,7 +45,10 @@ async def client():
 
 @pytest.mark.anyio
 async def test_create_organization(client):
-    payload = {"name": "Test Org", "slug": f"test-slug-{uuid.uuid4().hex[:4]}"}
+    payload = {
+        "name": "Test Org",
+        "slug": f"test-slug-{uuid.uuid4().hex[:4]}"
+    }
     response = await client.post("/organizations", json=payload)
     assert response.status_code in [200, 201]
 
@@ -87,7 +90,12 @@ async def test_suspend_organization(client):
 
 @pytest.mark.anyio
 async def test_create_project(client):
-    payload = {"name": "Test Project", "description": "Desc", "lifecycle": "ACTIVE"}
+    payload = {
+        "organization_id": DATA.get("org_id", str(uuid.uuid4())),
+        "name": "Test Project",
+        "description": "Desc",
+        "lifecycle": "ACTIVE"
+    }
     response = await client.post("/projects", json=payload)
     assert response.status_code in [200, 201]
 
@@ -122,7 +130,12 @@ async def test_update_project_status(client):
 
 @pytest.mark.anyio
 async def test_create_department(client):
-    payload = {"name": "DevOps", "description": "SRE Team", "type": "SRE"}
+    payload = {
+        "organization_id": DATA.get("org_id", str(uuid.uuid4())),
+        "name": "DevOps",
+        "description": "SRE Team",
+        "type": "SRE"
+    }
     response = await client.post("/departments", json=payload)
     assert response.status_code in [200, 201]
 

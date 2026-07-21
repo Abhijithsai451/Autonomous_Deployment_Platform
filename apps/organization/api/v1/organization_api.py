@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-
+from uuid import UUID
 from apps.organization.application.org_service import OrganizationService
 from apps.organization.domain.organization import Organization
 from apps.organization.infrastructure.database import org_db_session
@@ -15,7 +15,7 @@ class CreateOrgSchema(BaseModel):
 
 class StatusUpdateSchema(BaseModel):
     status: str
-@router.post("/")
+@router.post("")
 async def create_org(payload: CreateOrgSchema, db: Session = Depends(org_db_session)):
     svc = OrganizationService(db)
     return await svc.create_organization(payload.name, payload.slug)

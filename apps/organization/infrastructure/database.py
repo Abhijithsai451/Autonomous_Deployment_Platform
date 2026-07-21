@@ -1,4 +1,4 @@
-from apps.identity.config.identity_settings import identity_settings as settings
+from apps.organization.config.org_settings import org_settings as settings
 from packages.database.client import DatabaseClient
 
 org_db_client = DatabaseClient(
