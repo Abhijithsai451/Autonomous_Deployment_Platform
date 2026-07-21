@@ -11,6 +11,11 @@ class DepartmentType(PyEnum):
     EXTERNAL = "EXTERNAL"
     SRE = "SRE"
     SUPPORT = "SUPPORT"
+class DepartmentStatus(PyEnum):
+    CREATED = "CREATED"
+    UPDATED = "UPDATED"
+    DELETED = "DELETED"
+    ARCHIVED = "ARCHIVED"
 
 class Department(Base):
     __tablename__ = "departments"
@@ -21,6 +26,8 @@ class Department(Base):
     name = Column(String(255), nullable = False)
     type = Column(Enum(DepartmentType, name = "department_type", schema = "organization"),
                   default = DepartmentType.INTERNAL,nullable = False )
+    status = Column(Enum(DepartmentStatus, name="department_status", schema="organization"), default=DepartmentStatus.CREATED,
+                   nullable=False)
     description = Column(Text, nullable = True)
     metadata = Column(JSON, default={}, nullable=False)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
