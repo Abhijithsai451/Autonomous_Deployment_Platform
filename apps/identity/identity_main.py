@@ -11,7 +11,7 @@ async def example_identity_logging_handler(payload: dict, metadata: dict):
     logger.info(f"Received event tracking hook: {metadata.get('event_type')} - ID: {payload.get('id')}")
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def identity_lifespan(app: FastAPI):
     # 1. Startup: Establish NATS connection for both Publisher & EventSubscriber
     await EventBus.initialize()
     logger.info("NATS Messaging Core successfully initialized.")
@@ -31,7 +31,7 @@ async def lifespan(app: FastAPI):
     logger.info("NATS Messaging Core successfully disconnected.")
 
 # Instantiate App Component
-app = FastAPI(title="CortexOps Identity Service", lifespan=lifespan)
+app = FastAPI(title="CortexOps Identity Service", lifespan=identity_lifespan)
 
 @app.api_route("/health",methods=["GET", "HEAD"], tags=["System"])
 async def health_check():
@@ -44,7 +44,7 @@ async def health_check():
     }
 
 app.include_router(auth.router)
-app.include_router(organizations.router)
+#app.include_router(organizations.router)
 app.include_router(users.router)
 app.include_router(roles_permissions.router)
 app.include_router(service_accounts.router)
