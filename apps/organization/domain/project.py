@@ -1,0 +1,32 @@
+from datetime import datetime
+from uuid import uuid4
+from enum import Enum as PyEnum
+from sqlalchemy import Column, ForeignKey, String, Text, JSON, DateTime, Enum
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
+
+class ProjectStatus(PyEnum):
+    CREATED = "CREATED"
+    UPDATED = "UPDATED"
+    DELETED = "DELETED"
+    ARCHIVED = "ARCHIVED"
+from apps.organization.infrastructure.base import Base
+
+class Project(Base):
+    __tablename__ = "projects"
+    __table_args__ = {"schema":"organization"}
+
+    id = Column(UUID(as_uuid=True), primary_key = True, default = uuid4)
+    organization_id = Column(UUID(as_uuid=True), ForeignKey("organization.organizations.id"), nullable = False)
+    name = Column(String(255), nullable = False)
+    description = Column(Text, nullable = True)
+    lifecycle = Column(String(255),default = "ACTIVE", nullable = False)
+    status = Column(Enum(ProjectStatus, name="project_status",schema="organization"), default = ProjectStatus.CREATED, nullable=False)
+    project_metadata = Column("metadata", JSON, default={}, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+    organization = relationship("Organization",back_populates="projects")
+
+
+

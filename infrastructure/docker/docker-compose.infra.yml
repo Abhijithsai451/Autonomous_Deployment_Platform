@@ -1,0 +1,83 @@
+services:
+  db:
+    image: postgres:17
+    container_name: infra_pgdb
+    restart: always
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: default
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../../scripts:/docker-entrypoint-initdb.d
+    networks:
+      - shared_network
+
+  nats:
+    image: nats:latest
+    container_name: infra_nats
+    restart: always
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - nats_storage:/data
+    command: [ "-js", "-sd", "/data", "-V", "-D" ]
+    networks:
+      - shared_network
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    container_name: infra_keycloak
+    command: start-dev --import-realm
+    ports:
+      - "8080:8080"
+    volumes:
+      - ../../apps/identity/config:/opt/keycloak/data/import
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://infra_pgdb:5432/identity
+      KC_DB_USERNAME: user
+      KC_DB_PASSWORD: password
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: adminpassword
+      KC_HOSTNAME: localhost
+      KC_HTTP_ENABLED: "true"
+      KC_HTTP_PORT: 8080
+    networks:
+      - shared_network
+
+  cache:
+    image: redis:7.2-alpine
+    container_name: infra_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+       - redis_data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    networks:
+      - shared_network
+
+  api:
+    build:
+      context: ../../
+      dockerfile: infrastructure/docker/Dockerfile
+    depends_on:
+      - db
+      - keycloak
+    networks:
+      - shared_network
+volumes:
+  pgdata:
+  nats_storage:
+  redis_data:
+
+networks:
+  shared_network:
+    name: cortexops_shared_network
+    external: true

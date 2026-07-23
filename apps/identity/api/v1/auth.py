@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -8,7 +8,7 @@ from apps.identity.infrastructure.database import get_db_session
 from apps.identity.infrastructure.keycloak_client import KeycloakClient
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
-
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 class RefreshRequest(BaseModel):
     refresh_token : str
 
@@ -34,6 +34,16 @@ def login(
             detail = "Authentication failed"
         )
 
+@router.post("/logout")
+def logout(payload: RefreshRequest, db: Session = Depends(get_db_session)):
+    keycloak_client = KeycloakClient()
+    auth_service = AuthService(db, keycloak_client)
+    try:
+        auth_service.handle_logout(payload.refresh_token)
+        return {"status": "logged out"}
+    except Exception:
+        raise HTTPException(status_code=400, detail="Logout failed")
+
 @router.post("/refresh")
 def refresh(payload: RefreshRequest, db: Session = Depends(get_db_session)):
     keycloak_client = KeycloakClient()
@@ -48,3 +58,12 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db_session)):
         }
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid token transformation")
+
+@router.get("/me")
+def me(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db_session)):
+    keycloak_client = KeycloakClient()
+    auth_service = AuthService(db, keycloak_client)
+    try:
+        return auth_service.get_current_user_info(token)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Could not validate credentials")

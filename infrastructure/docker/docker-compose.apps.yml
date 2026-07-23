@@ -1,0 +1,44 @@
+services:
+  identity:
+    build:
+      context: ../../
+      dockerfile: infrastructure/docker/Dockerfile
+    container_name: cortexops_identity
+    ports:
+      - "8000:8000"
+    command: ["python", "-m", "uvicorn", "apps.identity.identity_main:app", "--host", "0.0.0.0", "--port", "8000"]
+    env_file:
+      - ../../.env
+    environment:
+      - IDENTITY_DATABASE_URL
+      - KEYCLOAK_URL
+      - KEYCLOAK_REALM
+      - KEYCLOAK_CLIENT_ID
+      - KEYCLOAK_CLIENT_SECRET
+      - KEYCLOAK_ADMIN_USER
+      - KEYCLOAK_ADMIN_PASSWORD
+      - NATS_URL
+    networks:
+      - shared_network
+
+  organization:
+    build:
+      context: ../../
+      dockerfile: infrastructure/docker/Dockerfile
+    container_name: cortexops_organization
+    ports:
+      - "8001:8001"
+    command: ["python", "-m", "uvicorn", "apps.organization.org_main:app", "--host", "0.0.0.0", "--port", "8001"]
+    env_file:
+      - ../../.env
+    environment:
+      - ORGANIZATION_DATABASE_URL
+      - NATS_URL
+
+    networks:
+      - shared_network
+
+networks:
+  shared_network:
+    name: cortexops_shared_network
+    external: true

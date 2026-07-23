@@ -1,13 +1,13 @@
 import json
 import logging
-from typing import Dict, Any, Callable, Awaitable
+from typing import Callable, Awaitable
 
 import nats
 from opentelemetry import trace
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 logger = logging.getLogger("cortexops_sdk.messaging")
 
-class EventSubscriber:
+class Subscriber:
     def __init__(self, nats_url: str = "nats://localhost:4222"):
         self.nats_url = nats_url
         self.nc = None
@@ -65,9 +65,23 @@ class EventSubscriber:
                 await msg.nak()
 
         # Create a durable consumer so if your service restarts, it picks up where it left off
-        await self.js.subscribe(
-            subject=subject,
-            durable=durable_name,
-            cb=message_callback,
-            manual_ack=True  # Forces manual verification via msg.ack() before discarding
-        )
+        try:
+            await self.js.subscribe(
+                subject=subject,
+                durable=durable_name,
+                cb=message_callback,
+                manual_ack=True  # Forces manual verification via msg.ack() before discarding
+            )
+            logger.info(f"Successfully bound subscription to JetStream subject: {subject} ({durable_name})")
+        except nats.errors.Error as e:
+            if "already bound to a subscription" in str(e):
+                logger.warning(
+                    f"JetStream subscription '{durable_name}' on '{subject}' is already actively bound. "
+                    f"Bypassing duplicate registration loop gracefully."
+                )
+            else:
+                raise e
+
+    async def close(self):
+        if self.nc:
+            await self.nc.close()
