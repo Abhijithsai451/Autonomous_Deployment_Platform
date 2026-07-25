@@ -1,7 +1,7 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
-    ORGANIZATION_DATABASE_URL: str
+    WORKFLOW_DATABASE_URL: str
     NATS_URL : str
 
     model_config = SettingsConfigDict(
@@ -9,4 +9,4 @@ class Settings(BaseSettings):
         extra = "ignore"
     )
 
-org_settings = Settings()
+workflow_settings = Settings()

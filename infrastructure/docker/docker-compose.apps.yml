@@ -37,7 +37,22 @@ services:
 
     networks:
       - shared_network
+  workflow:
+    build:
+      context: ../../
+      dockerfile: infrastructure/docker/Dockerfile
+    container_name: cortexops_workflow
+    ports:
+      - "8002:8002"
+    command: [ "python", "-m", "uvicorn", "apps.workflow.workflow_main:app", "--host", "0.0.0.0", "--port", "8002" ]
+    env_file:
+      - ../../.env
+    environment:
+      - WORKFLOW_DATABASE_URL
+      - NATS_URL
 
+    networks:
+      - shared_network
 networks:
   shared_network:
     name: cortexops_shared_network
