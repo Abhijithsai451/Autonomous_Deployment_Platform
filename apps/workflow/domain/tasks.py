@@ -44,5 +44,6 @@ class Task(Base):
         secondary="workflow.task_dependencies",
         primaryjoin="Task.id == TaskDependency.task_id",
         secondaryjoin="Task.id == TaskDependency.depends_on_task_id",
-        backref="depended_on_by"
+        backref="depended_on_by",
+        overlaps="depended_on_by"
     )
