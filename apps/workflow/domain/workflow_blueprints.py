@@ -1,4 +1,4 @@
-import datetime
+from datetime import datetime
 from uuid import uuid4
 
 from sqlalchemy import UniqueConstraint, Column, UUID, String, Integer, Boolean, Text, DateTime
