@@ -11,6 +11,7 @@ APPS_COMPOSE="infrastructure/docker/docker-compose.apps.yml"
 SERVICES=(
     "Identity Service      : 8000 : cortexops_identity      : apps/identity/identity_test.py"
     "Organization Service  : 8001 : cortexops_organization  : apps/organization//org_test.py"
+    "Workflow Service      : 8002 : cortexops_workflow      : apps/workflow/workflow_test.py"
     #"Audit Service         : 8002 : cortexops_audit         : tests/test_audit.py"
     #"Workflow Service      : 8003 : cortexops_workflow      : tests/test_workflow.py"
     # Add your other 6 services here as you build them!
@@ -91,8 +92,5 @@ done
 
 echo "========================================="
 echo "🎉 All systems are online and verified!"
-echo "📍 API:          http://localhost:8000"
-echo "📍 Keycloak:     http://localhost:8080"
-echo "📍 NATS Broker:  http://localhost:4222"
 echo "========================================="
 echo "💡 To view logs, run: docker compose -f $APPS_COMPOSE logs -f"
