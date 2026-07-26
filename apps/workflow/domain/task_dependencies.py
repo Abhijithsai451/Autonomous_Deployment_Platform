@@ -1,4 +1,4 @@
-import datetime
+from datetime import datetime
 from uuid import uuid4
 from sqlalchemy import Column, UUID, DateTime, ForeignKey, UniqueConstraint, CheckConstraint
 from apps.workflow.infrastructure.base import Base

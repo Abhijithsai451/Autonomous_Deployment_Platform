@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from apps.workflow.api.v1 import blueprint_api, instance_api, task_api, timeline_api
 from infrastructure.nats.nats_client import EventBus
 from packages.logging.structured_logs import StructuredLogger
 
@@ -45,3 +46,11 @@ async def health_check():
         "status": "healthy",
         "service": "workflow-service"
     }
+
+app.include_router(blueprint_api.router)
+
+app.include_router(instance_api.router)
+
+app.include_router(task_api.router)
+
+app.include_router(timeline_api.router)

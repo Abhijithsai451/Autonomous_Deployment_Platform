@@ -1,7 +1,8 @@
 from packages.database.client import DatabaseClient
-from apps.workflow.config import workflow_settings as settings
+from apps.workflow.config.workflow_settings import workflow_settings
+
 workflow_db_client = DatabaseClient(
-    database_url = settings.WORKFLOW_DATABASE_URL,
+    database_url = workflow_settings.WORKFLOW_DATABASE_URL,
     schema_name = "workflow"
 )
 
