@@ -116,3 +116,56 @@ CREATE INDEX IF NOT EXISTS idx_instances_status ON workflow.workflow_instances(s
 CREATE INDEX IF NOT EXISTS idx_tasks_instance ON workflow.tasks(workflow_instance_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON workflow.tasks(status);
 CREATE INDEX IF NOT EXISTS idx_events_instance ON workflow.workflow_events(workflow_instance_id);
+
+-- ========================================================
+-- SEED DATA
+-- ========================================================
+BEGIN;
+
+INSERT INTO workflow.workflow_blueprints (name, description, version, definition)
+VALUES
+('Document Processing', 'Extracts text and metadata from PDFs', 1, '{"steps": ["upload", "ocr", "extract", "validate"]}'::jsonb),
+('User Onboarding', 'Handles new user registration and setup', 1, '{"steps": ["create_account", "verify_email", "provision_resources"]}'::jsonb),
+('Cloud Provisioning', 'Spins up AWS/GCP infrastructure', 1, '{"steps": ["plan", "apply", "output"]}'::jsonb),
+('Model Training', 'ML Pipeline for training classifiers', 2, '{"steps": ["data_fetch", "preprocess", "train", "eval"]}'::jsonb),
+('Approval Chain', 'Standard multi-step approval workflow', 1, '{"steps": ["submit", "manager_review", "exec_review"]}'::jsonb);
+
+INSERT INTO workflow.workflow_instances (blueprint_id, status, current_step, started_by, input_data)
+SELECT
+    (SELECT id FROM workflow.workflow_blueprints ORDER BY random() LIMIT 1),
+    (ARRAY['PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'WAITING_FOR_APPROVAL'])[floor(random() * 5 + 1)]::workflow.workflow_status,
+    'step_' || floor(random() * 5 + 1),
+    gen_random_uuid(),
+    jsonb_build_object('request_id', 'REQ-' || i, 'priority', floor(random() * 3))
+FROM generate_series(1, 20) i;
+
+INSERT INTO workflow.tasks (workflow_instance_id, task_definition_id, name, action_type, status, input_data)
+SELECT
+    id as workflow_instance_id,
+    'task_def_' || floor(random() * 100),
+    'Task for ' || status,
+    (ARRAY['HTTP', 'LAMBDA', 'GRPC', 'MANUAL'])[floor(random() * 4 + 1)],
+    (ARRAY['PENDING', 'READY', 'RUNNING', 'COMPLETED'])[floor(random() * 4 + 1)]::workflow.task_status,
+    jsonb_build_object('retry_allowed', true)
+FROM workflow.workflow_instances, generate_series(1, 3);
+
+INSERT INTO workflow.task_dependencies (task_id, depends_on_task_id)
+SELECT
+    t1.id,
+    t2.id
+FROM workflow.tasks t1
+JOIN workflow.tasks t2 ON t1.workflow_instance_id = t2.workflow_instance_id
+WHERE t1.id <> t2.id
+  AND random() > 0.8
+ON CONFLICT DO NOTHING;
+
+INSERT INTO workflow.workflow_events (workflow_instance_id, task_id, event_type, payload)
+SELECT
+    workflow_instance_id,
+    id,
+    (ARRAY['TaskStarted', 'TaskCompleted', 'TaskRetried'])[floor(random() * 3 + 1)],
+    jsonb_build_object('timestamp', NOW(), 'message', 'Event generated for task ' || name)
+FROM workflow.tasks
+WHERE random() > 0.5;
+
+COMMIT;
