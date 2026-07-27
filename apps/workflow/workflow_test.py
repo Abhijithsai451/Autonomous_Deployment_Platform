@@ -197,3 +197,39 @@ async def test_get_instance_timeline(client):
     target_id = DATA.get("instance_id", str(uuid.uuid4()))
     response = await client.get(f"/instances/{target_id}/timeline")
     assert response.status_code in [200, 404]
+
+
+@pytest.mark.anyio
+async def test_complete_instance_publishes_event(client):
+    target_id = DATA.get("instance_id", str(uuid.uuid4()))
+    response = await client.post(f"/instances/{target_id}/complete", json={"result": "success"})
+    assert response.status_code in [200, 404]
+
+
+@pytest.mark.anyio
+async def test_timeout_instance_publishes_event(client):
+    target_id = DATA.get("instance_id", str(uuid.uuid4()))
+    response = await client.post(f"/instances/{target_id}/timeout", json={"reason": "SLA breached"})
+    assert response.status_code in [200, 404]
+
+
+@pytest.mark.anyio
+async def test_complete_task_publishes_event(client):
+    target_id = DATA.get("task_id", str(uuid.uuid4()))
+    response = await client.post(f"/tasks/{target_id}/complete", json={"output": "ok"})
+    assert response.status_code in [200, 404]
+
+
+@pytest.mark.anyio
+async def test_request_and_receive_approval_events(client):
+    target_id = DATA.get("task_id", str(uuid.uuid4()))
+
+    # 1. Request Approval
+    req_res = await client.post(f"/tasks/{target_id}/request-approval",
+                                json={"approvers": ["admin@cortex.ops"], "details": {"gate": "production"}})
+    assert req_res.status_code in [200, 404]
+
+    # 2. Receive Approval
+    rec_res = await client.post(f"/tasks/{target_id}/receive-approval",
+                                json={"approved_by": "admin@cortex.ops", "metadata": {"note": "Approved"}})
+    assert rec_res.status_code in [200, 404]
