@@ -1,0 +1,68 @@
+import asyncio
+from apps.workflow.domain.outbox import OutboxEvent, OutboxStatus
+from apps.workflow.infrastructure.database import workflow_db_session
+from infrastructure.nats.nats_client import EventBus
+from apps.workflow.infrastructure.structured_logs import struct_logger as logger
+
+class OutboxPublisher:
+    def __init__(self, poll_interval_seconds: float = 1.0, batch_size: int = 50):
+        self.poll_interval = poll_interval_seconds
+        self.batch_size = batch_size
+        self._is_running = False
+
+    async def process_pending_events(self) -> int:
+        processed_count = 0
+        with workflow_db_session() as db:
+            try:
+                events = (
+                    db.query(OutboxEvent)
+                    .filter(OutboxEvent.status == OutboxStatus.PENDING)
+                    .order_by(OutboxEvent.created_at.asc())
+                    .limit(self.batch_size)
+                    .with_for_update(skip_locked=True)
+                    .all()
+                )
+
+                if not events:
+                    return 0
+
+                for event in events:
+                    try:
+                        subject = f"workflow.events.{event.event_type}"
+
+                        await EventBus.publish(
+                            subject=subject,
+                            payload=event.payload
+                        )
+                        event.mark_processed()
+                        processed_count += 1
+                    except Exception as exc:
+                        self.logger.error(
+                            f"Failed to publish outbox event {event.id}: {exc}",
+                            extra={"event_id": str(event.id), "event_type": event.event_type}
+                        )
+                        event.mark_failed(error=str(exc))
+
+                db.commit()
+            except Exception as err:
+                db.rollback()
+                self.logger.error(f"Error processing outbox batch: {err}")
+
+        return processed_count
+
+    async def start(self) -> None:
+        self._is_running = True
+        logger.info("Outbox Publisher Worker started.")
+
+        while self._is_running:
+            try:
+                count = await self.process_pending_events()
+                if count == 0:
+                    await asyncio.sleep(self.poll_interval)
+            except Exception as e:
+                logger.error(f"Unexpected error in outbox loop: {e}")
+                await asyncio.sleep(self.poll_interval)
+
+    def stop(self) -> None:
+        self._is_running = False
+        logger.info("Outbox Publisher Worker stopping...")

@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from apps.workflow.domain.exceptions import InvalidStateTransitionError
+from apps.workflow.domain.outbox import OutboxEvent, OutboxStatus
 from apps.workflow.domain.tasks import Task, TaskStatus
 from apps.workflow.domain.workflow_events import WorkflowEvent
 from infrastructure.nats.nats_client import EventBus
@@ -15,14 +16,8 @@ class TaskService:
     def __init__(self, db:Session):
         self.db = db
 
-    def _log_event(
-            self,
-            instance_id: UUID,
-            task_id: UUID,
-            event_type: str,
-            payload: dict
-    ) -> WorkflowEvent:
-        """Stages an internal audit log event within the current DB session."""
+    def _log_event(self,instance_id: UUID,task_id: UUID,event_type: str,payload: dict) -> WorkflowEvent:
+        """Stages an audit log event AND an outbox event in the current DB session."""
         event = WorkflowEvent(
             workflow_instance_id=instance_id,
             task_id=task_id,
@@ -30,6 +25,20 @@ class TaskService:
             payload=payload,
         )
         self.db.add(event)
+
+        outbox_entry = OutboxEvent(
+            event_type=event_type,
+            aggregate_type="Task",
+            aggregate_id=task_id,
+            payload={
+                "task_id": str(task_id),
+                "instance_id": str(instance_id),
+                **payload
+            },
+            status=OutboxStatus.PENDING
+        )
+        self.db.add(outbox_entry)
+
         return event
 
     async def get_task_by_id(self, task_id: UUID) -> Task:

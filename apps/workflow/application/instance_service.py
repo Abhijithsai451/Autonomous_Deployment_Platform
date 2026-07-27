@@ -2,9 +2,8 @@ from datetime import datetime
 from fastapi import HTTPException
 from typing import Optional, List
 from uuid import UUID
-
 from sqlalchemy.orm import Session
-
+from apps.workflow.domain.outbox import OutboxEvent, OutboxStatus
 from apps.workflow.domain.task_dependencies import TaskDependency
 from apps.workflow.domain.tasks import Task, TaskStatus
 from apps.workflow.domain.workflow_events import WorkflowEvent
@@ -15,7 +14,9 @@ class InstanceService:
     def __init__(self, db:Session):
         self.db = db
 
-    async def _log_event(self, instance_id: UUID, event_type: str, payload: dict, task_id: Optional[UUID] = None):
+    def _log_event(self, instance_id: UUID, event_type: str, payload: dict, task_id: Optional[UUID] = None)\
+            -> WorkflowEvent:
+        """Stages an audit log event AND an outbox event in the current DB session."""
         event = WorkflowEvent(
             workflow_instance_id=instance_id,
             task_id=task_id,
@@ -23,7 +24,17 @@ class InstanceService:
             payload=payload
         )
         self.db.add(event)
-        self.db.commit()
+
+        outbox_entry = OutboxEvent(
+            event_type=event_type,
+            aggregate_type="WorkflowInstance",
+            aggregate_id=instance_id,
+            payload={"instance_id": str(instance_id), **payload},
+            status=OutboxStatus.PENDING
+        )
+        self.db.add(outbox_entry)
+
+        return event
 
     async def create_instance(self, blueprint_id: UUID, input_data: dict, started_by: Optional[UUID] = None) -> WorkflowInstance:
         instance = WorkflowInstance(
