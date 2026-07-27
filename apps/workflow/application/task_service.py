@@ -57,3 +57,37 @@ class TaskService:
         await EventBus.publish("TaskFailed", {"task_id": str(task.id), "reason": "Cancelled by user"})
         return task
 
+    async def complete_task(self, task_id: UUID, output_data: dict = {}) -> Task:
+        """Publishes TaskCompleted"""
+        task = await self.get_task_by_id(task_id)
+        task.status = TaskStatus.COMPLETED
+        task.output_data = output_data
+        task.completed_at = datetime.utcnow()
+        self.db.commit()
+
+        await self._log_event(task.workflow_instance_id, task.id, "TaskCompleted", {"output": output_data})
+        await EventBus.publish("TaskCompleted", {"task_id": str(task.id), "instance_id": str(task.workflow_instance_id),
+                                                 "output": output_data})
+        return task
+
+    async def request_approval(self, task_id: UUID, required_approvers: list = [], details: dict = {}) -> Task:
+        """Publishes ApprovalRequested"""
+        task = await self.get_task_by_id(task_id)
+        task.status = TaskStatus.RUNNING  # Waiting state
+        self.db.commit()
+
+        payload = {"approvers": required_approvers, "details": details}
+        await self._log_event(task.workflow_instance_id, task.id, "ApprovalRequested", payload)
+        await EventBus.publish("ApprovalRequested",
+                               {"task_id": str(task.id), "instance_id": str(task.workflow_instance_id), **payload})
+        return task
+
+    async def receive_approval(self, task_id: UUID, approved_by: str, approval_metadata: dict = {}) -> Task:
+        """Publishes ApprovalReceived"""
+        task = await self.get_task_by_id(task_id)
+        payload = {"approved_by": approved_by, "metadata": approval_metadata}
+
+        await self._log_event(task.workflow_instance_id, task.id, "ApprovalReceived", payload)
+        await EventBus.publish("ApprovalReceived",
+                               {"task_id": str(task.id), "instance_id": str(task.workflow_instance_id), **payload})
+        return task

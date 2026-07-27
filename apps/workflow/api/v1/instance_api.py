@@ -24,6 +24,8 @@ class SignalInstanceSchema(BaseModel):
 class CancelInstanceSchema(BaseModel):
     reason: Optional[str] = None
 
+class TimeoutInstanceSchema(BaseModel):
+    reason: Optional[str] = "Execution timeout reached"
 
 @router.post("")
 async def create_instance(payload: CreateInstanceSchema, db: Session = Depends(workflow_db_session)):
@@ -76,3 +78,14 @@ async def retry_instance(id: UUID, db: Session = Depends(workflow_db_session)):
 async def signal_instance(id: UUID, payload: SignalInstanceSchema, db: Session = Depends(workflow_db_session)):
     svc = InstanceService(db)
     return await svc.signal_instance(id, signal_name=payload.signal_name, payload=payload.payload)
+
+@router.post("/{id}/complete")
+async def complete_instance(id: UUID, payload: dict = {}, db: Session = Depends(workflow_db_session)):
+    svc = InstanceService(db)
+    return await svc.complete_instance(id, output_data=payload)
+
+@router.post("/{id}/timeout")
+async def timeout_instance(id: UUID, payload: Optional[TimeoutInstanceSchema] = None, db: Session = Depends(workflow_db_session)):
+    svc = InstanceService(db)
+    reason = payload.reason if payload else "Execution timeout reached"
+    return await svc.timeout_instance(id, reason=reason)

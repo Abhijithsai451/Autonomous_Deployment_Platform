@@ -132,6 +132,42 @@ class InstanceService:
         await EventBus.publish("WorkflowSignaled", {"id": str(instance.id), "signal": signal_name, "payload": payload})
         return instance
 
+    async def complete_instance(self, instance_id: UUID, output_data: dict = {}) -> WorkflowInstance:
+        """Publishes WorkflowCompleted"""
+        instance = await self.get_instance_by_id(instance_id)
+        instance.status = WorkflowStatus.COMPLETED
+        instance.output_data = output_data
+        instance.completed_at = datetime.utcnow()
+        self.db.commit()
+
+        await self._log_event(instance.id, "WorkflowCompleted", {"output": output_data})
+        await EventBus.publish("WorkflowCompleted", {"id": str(instance.id), "output": output_data})
+        return instance
+
+    async def fail_instance(self, instance_id: UUID, error_details: dict = {}) -> WorkflowInstance:
+        """Publishes WorkflowFailed"""
+        instance = await self.get_instance_by_id(instance_id)
+        instance.status = WorkflowStatus.FAILED
+        instance.error_details = error_details
+        instance.completed_at = datetime.utcnow()
+        self.db.commit()
+
+        await self._log_event(instance.id, "WorkflowFailed", {"error": error_details})
+        await EventBus.publish("WorkflowFailed", {"id": str(instance.id), "error": error_details})
+        return instance
+
+    async def timeout_instance(self, instance_id: UUID, reason: str = "Execution timeout reached") -> WorkflowInstance:
+        """Publishes WorkflowTimedOut"""
+        instance = await self.get_instance_by_id(instance_id)
+        instance.status = WorkflowStatus.FAILED
+        instance.error_details = {"reason": reason}
+        instance.completed_at = datetime.utcnow()
+        self.db.commit()
+
+        await self._log_event(instance.id, "WorkflowTimedOut", {"reason": reason})
+        await EventBus.publish("WorkflowTimedOut", {"id": str(instance.id), "reason": reason})
+        return instance
+
     async def update_workflow_instance(self, updates: dict):
         pass
 
