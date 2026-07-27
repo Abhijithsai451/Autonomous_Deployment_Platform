@@ -1,9 +1,12 @@
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import Optional, Dict, Any
 from uuid import uuid4
 from enum import Enum as PyEnum
 from sqlalchemy import Column, UUID, String, DateTime, Enum, ForeignKey, Integer
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
+
+from apps.workflow.domain.exceptions import InvalidStateTransitionError
 from apps.workflow.infrastructure.base import Base
 
 class TaskStatus(PyEnum):
@@ -13,6 +16,7 @@ class TaskStatus(PyEnum):
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
+    RETRYING = "RETRYING"
 
 class Task(Base):
     __tablename__ = "tasks"
@@ -47,3 +51,64 @@ class Task(Base):
         backref="depended_on_by",
         overlaps="depended_on_by"
     )
+
+    # ========================================================
+    # STATE MACHINE METHODS
+    # ========================================================
+
+    def mark_ready(self) -> None:
+        """Transitions state from PENDING or RETRYING -> READY."""
+        allowed_states = {TaskStatus.PENDING, TaskStatus.RETRYING}
+        if self.status not in allowed_states:
+            raise InvalidStateTransitionError("Task", str(self.id), self.status.value, "mark_ready")
+
+        self.status = TaskStatus.READY
+
+    def start(self) -> None:
+        """Transitions state from READY -> RUNNING."""
+        if self.status != TaskStatus.READY:
+            raise InvalidStateTransitionError("Task", str(self.id), self.status.value, "start")
+
+        self.status = TaskStatus.RUNNING
+        self.started_at = datetime.now(timezone.utc)
+
+    def complete(self, output_data: Optional[Dict[str, Any]] = None) -> None:
+        """Transitions state from RUNNING -> COMPLETED."""
+        if self.status != TaskStatus.RUNNING:
+            raise InvalidStateTransitionError("Task", str(self.id), self.status.value, "complete")
+
+        self.status = TaskStatus.COMPLETED
+        if output_data is not None:
+            self.output_data = output_data
+        self.completed_at = datetime.now(timezone.utc)
+
+    def fail(self, error_details: Optional[Dict[str, Any]] = None) -> None:
+        """Transitions state from RUNNING -> FAILED."""
+        if self.status != TaskStatus.RUNNING:
+            raise InvalidStateTransitionError("Task", str(self.id), self.status.value, "fail")
+
+        self.status = TaskStatus.FAILED
+        if error_details is not None:
+            self.error_details = error_details
+        self.completed_at = datetime.now(timezone.utc)
+
+    def retry(self) -> None:
+        """Transitions state from FAILED -> RETRYING."""
+        if self.status != TaskStatus.FAILED:
+            raise InvalidStateTransitionError("Task", str(self.id), self.status.value, "retry")
+
+        if self.retry_count >= self.max_retries:
+            raise InvalidStateTransitionError("Task", str(self.id), self.status.value, "max_retries_exceeded")
+
+        self.retry_count += 1
+        self.status = TaskStatus.RETRYING
+
+    def cancel(self, reason: str = "Task cancelled") -> None:
+        """Transitions state from PENDING, READY, or RUNNING -> CANCELLED."""
+        cancellable_states = {TaskStatus.PENDING, TaskStatus.READY, TaskStatus.RUNNING}
+        if self.status not in cancellable_states:
+            raise InvalidStateTransitionError("Task", str(self.id), self.status.value, "cancel")
+
+        self.status = TaskStatus.CANCELLED
+        self.error_details = {"cancellation_reason": reason}
+        self.completed_at = datetime.now(timezone.utc)
