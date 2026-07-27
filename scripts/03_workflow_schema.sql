@@ -1,18 +1,4 @@
 -- ========================================================
--- ENTITY RELATIONSHIP DIAGRAM
--- ========================================================
--- [ workflow_blueprints ] (1)
---       │
---       └── (N) [ workflow_instances ] (1)
---                       │
---                       ├── (N) [ tasks ] (1)
---                       │           │
---                       │           └── (N) [ task_dependencies ] (Self-Referencing DAG)
---                       │
---                       └── (N) [ workflow_events ]
-
-
--- ========================================================
 -- DATABASE SETUP
 -- ========================================================
 CREATE DATABASE workflow;
@@ -43,6 +29,13 @@ CREATE TYPE workflow.task_status AS ENUM (
             'COMPLETED',
             'FAILED',
             'CANCELLED'
+        );
+
+CREATE TYPE workflow.outbox_status AS ENUM (
+            'PENDING',
+            'PROCESSING',
+            'PROCESSED',
+            'FAILED'
         );
 
 CREATE TABLE IF NOT EXISTS workflow.workflow_blueprints (
@@ -111,12 +104,27 @@ CREATE TABLE IF NOT EXISTS workflow.workflow_events (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS workflow.outbox_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_type VARCHAR(100) NOT NULL,
+    aggregate_type VARCHAR(50) NOT NULL,
+    aggregate_id UUID NOT NULL,
+    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+    status workflow.outbox_status NOT NULL DEFAULT 'PENDING',
+    retry_count INT NOT NULL DEFAULT 0,
+    error_message TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    processed_at TIMESTAMP WITH TIME ZONE
+);
+
 CREATE INDEX IF NOT EXISTS idx_instances_blueprint ON workflow.workflow_instances(blueprint_id);
 CREATE INDEX IF NOT EXISTS idx_instances_status ON workflow.workflow_instances(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_instance ON workflow.tasks(workflow_instance_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON workflow.tasks(status);
 CREATE INDEX IF NOT EXISTS idx_events_instance ON workflow.workflow_events(workflow_instance_id);
-
+CREATE INDEX IF NOT EXISTS idx_outbox_status ON workflow.outbox_events(status);
+CREATE INDEX IF NOT EXISTS idx_outbox_event_type ON workflow.outbox_events(event_type);
+CREATE INDEX IF NOT EXISTS idx_outbox_aggregate ON workflow.outbox_events(aggregate_type, aggregate_id);
 -- ========================================================
 -- SEED DATA
 -- ========================================================
@@ -167,5 +175,37 @@ SELECT
     jsonb_build_object('timestamp', NOW(), 'message', 'Event generated for task ' || name)
 FROM workflow.tasks
 WHERE random() > 0.5;
+
+INSERT INTO workflow.outbox_events (event_type, aggregate_type, aggregate_id, payload, status, processed_at)
+SELECT
+    'WorkflowStarted',
+    'WorkflowInstance',
+    id,
+    jsonb_build_object(
+        'instance_id', id,
+        'blueprint_id', blueprint_id,
+        'status', status
+    ),
+    (ARRAY['PENDING', 'PROCESSED'])[floor(random() * 2 + 1)]::workflow.outbox_status,
+    CASE WHEN random() > 0.5 THEN NOW() ELSE NULL END
+FROM workflow.workflow_instances
+WHERE random() > 0.4;
+
+-- Seed Outbox Events for Tasks
+INSERT INTO workflow.outbox_events (event_type, aggregate_type, aggregate_id, payload, status, processed_at)
+SELECT
+    'TaskCompleted',
+    'Task',
+    id,
+    jsonb_build_object(
+        'task_id', id,
+        'instance_id', workflow_instance_id,
+        'action_type', action_type,
+        'status', status
+    ),
+    (ARRAY['PENDING', 'PROCESSED', 'FAILED'])[floor(random() * 3 + 1)]::workflow.outbox_status,
+    CASE WHEN random() > 0.5 THEN NOW() ELSE NULL END
+FROM workflow.tasks
+WHERE status = 'COMPLETED';
 
 COMMIT;
