@@ -34,8 +34,7 @@ class InstanceService:
             started_at=datetime.utcnow()
         )
         self.db.add(instance)
-        self.db.commit()
-        self.db.refresh(instance)
+        self.db.flush()
 
         blueprint = instance.blueprint
         if blueprint and "tasks" in blueprint.definition:
@@ -70,6 +69,73 @@ class InstanceService:
         await EventBus.publish("WorkflowStarted", {"id": str(instance.id), "blueprint_id": str(blueprint_id)})
         return instance
 
+    async def start_instance(self, instance_id: UUID) -> WorkflowInstance:
+        """
+        Triggers execution:
+        1. Invokes domain method instance.start() (PENDING -> RUNNING)
+        2. Unlocks root tasks (tasks with 0 dependencies) -> READY
+        3. Records audit log event
+        """
+        instance = self.db.query(WorkflowInstance).get(instance_id)
+        if not instance:
+            raise ValueError(f"WorkflowInstance {instance_id} not found")
+
+        # Guarded transition (PENDING -> RUNNING)
+        instance.start()
+
+        # Mark root tasks (tasks without dependencies) as READY
+        for task in instance.tasks:
+            if not task.dependencies and task.status == TaskStatus.PENDING:
+                task.mark_ready()
+
+        self._log_event(instance.id, "WorkflowStarted", {"started_at": str(instance.started_at)})
+
+        self.db.commit()
+        self.db.refresh(instance)
+        return instance
+
+    async def pause_instance(self, instance_id: UUID) -> WorkflowInstance:
+        instance = self.db.query(WorkflowInstance).get(instance_id)
+        if not instance:
+            raise ValueError(f"WorkflowInstance {instance_id} not found")
+
+        instance.pause()
+        self._log_event(instance.id, "WorkflowPaused", {})
+
+        self.db.commit()
+        self.db.refresh(instance)
+        return instance
+
+    async def resume_instance(self, instance_id: UUID) -> WorkflowInstance:
+        instance = self.db.query(WorkflowInstance).get(instance_id)
+        if not instance:
+            raise ValueError(f"WorkflowInstance {instance_id} not found")
+
+        instance.resume()
+        self._log_event(instance.id, "WorkflowResumed", {})
+
+        self.db.commit()
+        self.db.refresh(instance)
+        return instance
+
+    async def cancel_instance(self, instance_id: UUID, reason: str = "User cancelled execution") -> WorkflowInstance:
+        instance = self.db.query(WorkflowInstance).get(instance_id)
+        if not instance:
+            raise ValueError(f"WorkflowInstance {instance_id} not found")
+
+        instance.cancel(reason=reason)
+
+        # Also cancel all active/pending tasks
+        for task in instance.tasks:
+            if task.status in {TaskStatus.PENDING, TaskStatus.READY, TaskStatus.RUNNING}:
+                task.cancel(reason=f"Workflow cancelled: {reason}")
+
+        self._log_event(instance.id, "WorkflowCancelled", {"reason": reason})
+
+        self.db.commit()
+        self.db.refresh(instance)
+        return instance
+
     async def get_instances(self, limit: int = 100, offset: int = 0) -> List[WorkflowInstance]:
         return self.db.query(WorkflowInstance).offset(offset).limit(limit).all()
 
@@ -79,95 +145,58 @@ class InstanceService:
             raise HTTPException(status_code=404, detail=f"Workflow instance not found with id {instance_id}")
         return instance
 
-    async def pause_instance(self, instance_id: UUID) -> WorkflowInstance:
-        instance = await self.get_instance_by_id(instance_id)
-        if instance.status != WorkflowStatus.RUNNING:
-            raise HTTPException(status_code=400, detail=f"Cannot pause workflow in status {instance.status.value}")
-
-        instance.status = WorkflowStatus.PAUSED
-        self.db.commit()
-
-        await self._log_event(instance.id, "WorkflowPaused", {})
-        await EventBus.publish("WorkflowPaused", {"id": str(instance.id)})
-        return instance
-
-    async def resume_instance(self, instance_id: UUID) -> WorkflowInstance:
-        instance = await self.get_instance_by_id(instance_id)
-        if instance.status not in (WorkflowStatus.PAUSED, WorkflowStatus.WAITING_FOR_APPROVAL):
-            raise HTTPException(status_code=400, detail=f"Cannot resume workflow in status {instance.status.value}")
-
-        instance.status = WorkflowStatus.RUNNING
-        self.db.commit()
-
-        await self._log_event(instance.id, "WorkflowResumed", {})
-        await EventBus.publish("WorkflowResumed", {"id": str(instance.id)})
-        return instance
-
-    async def cancel_instance(self, instance_id: UUID, reason: Optional[str] = None) -> WorkflowInstance:
-        instance = await self.get_instance_by_id(instance_id)
-        instance.status = WorkflowStatus.CANCELLED
-        instance.completed_at = datetime.utcnow()
-        self.db.commit()
-
-        await self._log_event(instance.id, "WorkflowCancelled", {"reason": reason})
-        await EventBus.publish("WorkflowCancelled", {"id": str(instance.id), "reason": reason})
-        return instance
-
     async def retry_instance(self, instance_id: UUID) -> WorkflowInstance:
         instance = await self.get_instance_by_id(instance_id)
-        if instance.status != WorkflowStatus.FAILED:
-            raise HTTPException(status_code=400, detail="Only failed workflows can be retried.")
 
-        instance.status = WorkflowStatus.RUNNING
-        instance.error_details = None
+        # Domain-guarded transition (FAILED -> RUNNING)
+        instance.retry()
+
+        self._log_event(instance.id, "WorkflowRetried", {})
         self.db.commit()
-
-        await self._log_event(instance.id, "WorkflowRetried", {})
-        await EventBus.publish("WorkflowStarted", {"id": str(instance.id), "is_retry": True})
+        self.db.refresh(instance)
         return instance
 
     async def signal_instance(self, instance_id: UUID, signal_name: str, payload: dict) -> WorkflowInstance:
         instance = await self.get_instance_by_id(instance_id)
-        await self._log_event(instance.id, f"SignalReceived:{signal_name}", payload)
-        await EventBus.publish("WorkflowSignaled", {"id": str(instance.id), "signal": signal_name, "payload": payload})
+
+        # Audit event logged inside DB session
+        self._log_event(instance.id, f"SignalReceived:{signal_name}", payload)
+        self.db.commit()
+        self.db.refresh(instance)
         return instance
 
     async def complete_instance(self, instance_id: UUID, output_data: dict = {}) -> WorkflowInstance:
-        """Publishes WorkflowCompleted"""
         instance = await self.get_instance_by_id(instance_id)
-        instance.status = WorkflowStatus.COMPLETED
-        instance.output_data = output_data
-        instance.completed_at = datetime.utcnow()
-        self.db.commit()
 
-        await self._log_event(instance.id, "WorkflowCompleted", {"output": output_data})
-        await EventBus.publish("WorkflowCompleted", {"id": str(instance.id), "output": output_data})
+        # Domain-guarded transition (RUNNING -> COMPLETED)
+        instance.complete(output_data=output_data)
+
+        self._log_event(instance.id, "WorkflowCompleted", {"output": output_data})
+        self.db.commit()
+        self.db.refresh(instance)
         return instance
 
     async def fail_instance(self, instance_id: UUID, error_details: dict = {}) -> WorkflowInstance:
-        """Publishes WorkflowFailed"""
         instance = await self.get_instance_by_id(instance_id)
-        instance.status = WorkflowStatus.FAILED
-        instance.error_details = error_details
-        instance.completed_at = datetime.utcnow()
-        self.db.commit()
 
-        await self._log_event(instance.id, "WorkflowFailed", {"error": error_details})
-        await EventBus.publish("WorkflowFailed", {"id": str(instance.id), "error": error_details})
+        # Domain-guarded transition (RUNNING -> FAILED)
+        instance.fail(error_details=error_details)
+
+        self._log_event(instance.id, "WorkflowFailed", {"error": error_details})
+        self.db.commit()
+        self.db.refresh(instance)
         return instance
 
     async def timeout_instance(self, instance_id: UUID, reason: str = "Execution timeout reached") -> WorkflowInstance:
-        """Publishes WorkflowTimedOut"""
         instance = await self.get_instance_by_id(instance_id)
-        instance.status = WorkflowStatus.FAILED
-        instance.error_details = {"reason": reason}
-        instance.completed_at = datetime.utcnow()
+
+        # Domain-guarded transition (RUNNING -> TIMED_OUT)
+        instance.timeout(reason=reason)
+
+        self._log_event(instance.id, "WorkflowTimedOut", {"reason": reason})
         self.db.commit()
-
-        await self._log_event(instance.id, "WorkflowTimedOut", {"reason": reason})
-        await EventBus.publish("WorkflowTimedOut", {"id": str(instance.id), "reason": reason})
+        self.db.refresh(instance)
         return instance
-
     async def update_workflow_instance(self, updates: dict):
         pass
 
