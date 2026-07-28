@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import HTTPException, status
 from typing import List, Optional
 from uuid import UUID
@@ -9,7 +9,6 @@ from apps.workflow.domain.exceptions import InvalidStateTransitionError
 from apps.workflow.domain.outbox import OutboxEvent, OutboxStatus
 from apps.workflow.domain.tasks import Task, TaskStatus
 from apps.workflow.domain.workflow_events import WorkflowEvent
-from infrastructure.nats.nats_client import EventBus
 
 
 class TaskService:
@@ -17,7 +16,6 @@ class TaskService:
         self.db = db
 
     def _log_event(self,instance_id: UUID,task_id: UUID,event_type: str,payload: dict) -> WorkflowEvent:
-        """Stages an audit log event AND an outbox event in the current DB session."""
         event = WorkflowEvent(
             workflow_instance_id=instance_id,
             task_id=task_id,
@@ -42,7 +40,6 @@ class TaskService:
         return event
 
     async def get_task_by_id(self, task_id: UUID) -> Task:
-        """Retrieves a task by ID or raises a 404 HTTPException."""
         task = self.db.query(Task).filter(Task.id == task_id).first()
         if not task:
             raise HTTPException(
@@ -52,11 +49,9 @@ class TaskService:
         return task
 
     async def get_tasks_by_instance(self, instance_id: UUID) -> List[Task]:
-        """Retrieves all tasks associated with a workflow instance."""
         return self.db.query(Task).filter(Task.workflow_instance_id == instance_id).all()
 
     async def mark_task_ready(self, task_id: UUID) -> Task:
-        """Transitions state PENDING/RETRYING -> READY (Prerequisites met)."""
         task = await self.get_task_by_id(task_id)
         task.mark_ready()
 
@@ -66,7 +61,6 @@ class TaskService:
         return task
 
     async def start_task(self, task_id: UUID, assigned_agent_id: Optional[UUID] = None) -> Task:
-        """Transitions state READY -> RUNNING."""
         task = await self.get_task_by_id(task_id)
 
         task.start()
@@ -83,35 +77,53 @@ class TaskService:
         self.db.refresh(task)
         return task
 
-    async def complete_task(self, task_id: UUID, output_data: dict = {}) -> Task:
-        """Transitions state RUNNING -> COMPLETED."""
-        task = await self.get_task_by_id(task_id)
+    async def complete_task(self, task_id: UUID, output_data: dict = None) -> Task:
+        task = self.db.get(Task, task_id)
+        if not task:
+            raise ValueError(f"Task with ID {task_id} not found.")
 
-        # Guarded transition
-        task.complete(output_data=output_data)
+        task.status = TaskStatus.COMPLETED
+        task.completed_at = datetime.now(timezone.utc)
+        if output_data:
+            task.output_data = output_data
 
-        self._log_event(task.workflow_instance_id, task.id, "TaskCompleted", {"output": output_data})
+        self._log_event(
+            instance_id=task.workflow_instance_id,
+            task_id=task.id,
+            event_type="workflow.events.TaskCompleted",
+            payload={"status": task.status.value}
+        )
+
+        self.dependency_engine.evaluate_downstream_tasks(task)
+
         self.db.commit()
         self.db.refresh(task)
         return task
 
-    async def fail_task(self, task_id: UUID, error_details: dict = {}) -> Task:
-        """Transitions state RUNNING -> FAILED."""
-        task = await self.get_task_by_id(task_id)
+    async def fail_task(self, task_id: UUID, error_details: dict = None) -> Task:
+        task = self.db.get(Task, task_id)
+        if not task:
+            raise ValueError(f"Task with ID {task_id} not found.")
 
-        # Guarded transition
-        task.fail(error_details=error_details)
+        task.status = TaskStatus.FAILED
+        task.completed_at = datetime.now(timezone.utc)
+        task.error_details = error_details
 
-        self._log_event(task.workflow_instance_id, task.id, "TaskFailed", {"error": error_details})
+        self._log_event(
+            instance_id=task.workflow_instance_id,
+            task_id=task.id,
+            event_type="workflow.events.TaskFailed",
+            payload={"status": task.status.value, "error": error_details}
+        )
+
+        self.dependency_engine.cascade_failure(task)
+
         self.db.commit()
         self.db.refresh(task)
         return task
 
     async def retry_task(self, task_id: UUID) -> Task:
-        """Transitions state FAILED -> RETRYING."""
         task = await self.get_task_by_id(task_id)
-
-        # Domain method checks if retry_count < max_retries and status is FAILED
         task.retry()
 
         self._log_event(
@@ -125,10 +137,8 @@ class TaskService:
         return task
 
     async def cancel_task(self, task_id: UUID, reason: str = "Cancelled by user") -> Task:
-        """Transitions state PENDING/READY/RUNNING -> CANCELLED."""
         task = await self.get_task_by_id(task_id)
 
-        # Guarded transition
         task.cancel(reason=reason)
 
         self._log_event(task.workflow_instance_id, task.id, "TaskCancelled", {"reason": reason})
@@ -142,10 +152,7 @@ class TaskService:
             required_approvers: list = [],
             details: dict = {}
     ) -> Task:
-        """Puts a task into RUNNING state while waiting for external human approval."""
         task = await self.get_task_by_id(task_id)
-
-        # Ensure task is transitioned to RUNNING if it was READY
         if task.status == TaskStatus.READY:
             task.start()
 
@@ -162,7 +169,6 @@ class TaskService:
             approved_by: str,
             approval_metadata: dict = {}
     ) -> Task:
-        """Records an approval decision for a running approval task."""
         task = await self.get_task_by_id(task_id)
 
         if task.status != TaskStatus.RUNNING:

@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from apps.organization.api.v1 import organization_api, project_api, department_api
+from apps.organization.infrastructure.structured_logs import struct_logger as logger
 from infrastructure.nats.nats_client import EventBus
 from packages.logging.structured_logs import StructuredLogger
 
@@ -12,7 +13,6 @@ log_manager = StructuredLogger(
     initial_context = {"env": "production"}
 )
 
-logger = log_manager.get_logger()
 async def example_organization_logging_handler(payload: dict, metadata: dict):
     logger.info(f"Received event tracking hook: {metadata.get('event_type')} - ID: {payload.get('id')}")
 

@@ -1,7 +1,7 @@
 import asyncio
 from apps.workflow.domain.outbox import OutboxEvent, OutboxStatus
 from apps.workflow.infrastructure.database import workflow_db_session
-from infrastructure.nats.nats_client import EventBus
+from apps.workflow.infrastructure.workflow_nats_client import workflow_nats_client as nats
 from apps.workflow.infrastructure.structured_logs import struct_logger as logger
 
 class OutboxPublisher:
@@ -28,14 +28,9 @@ class OutboxPublisher:
 
                 for event in events:
                     try:
-                        subject = f"workflow.events.{event.event_type}"
-
-                        await EventBus.publish(
-                            subject=subject,
-                            payload=event.payload
-                        )
+                        await nats.publish(event_type= event.event_type, payload = event.payload)
                         event.mark_processed()
-                        processed_count += 1
+                        processed_count +=1
                     except Exception as exc:
                         self.logger.error(
                             f"Failed to publish outbox event {event.id}: {exc}",
