@@ -20,5 +20,5 @@ python-jose[cryptography]
 
 # Unit Testing
 pytest
-httpx
+httpx2
 pytest-asyncio

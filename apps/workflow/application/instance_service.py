@@ -166,8 +166,6 @@ class InstanceService:
     def get_instances(self, limit: int = 100, offset: int = 0) -> List[WorkflowInstance]:
         return self.list_instances(limit=limit, offset=offset)
 
-    # apps/workflow/application/instance_service.py
-
     def pause_instance(self, instance_id: UUID) -> WorkflowInstance:
         instance = self.get_instance_by_id(instance_id)
         instance.status = WorkflowStatus.PAUSED
