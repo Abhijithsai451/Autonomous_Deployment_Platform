@@ -1,7 +1,7 @@
 from packages.logging.structured_logs import StructuredLogger
 
 log_manager = StructuredLogger(
-    service_name="cortexops-workflow",
+    service_name="cortexops-identity",
     level= "INFO",
     initial_context = {"env": "production"}
 )

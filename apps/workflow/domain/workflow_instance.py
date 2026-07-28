@@ -17,6 +17,7 @@ class WorkflowStatus(PyEnum):
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
     TIMED_OUT = "TIMED_OUT"
+    WAITING_FOR_APPROVAL = "WAITING_FOR_APPROVAL"
 
 class WorkflowInstance(Base):
     __tablename__ = "workflow_instances"
@@ -32,10 +33,12 @@ class WorkflowInstance(Base):
     input_data = Column(JSONB, default={}, nullable=True)
     output_data = Column(JSONB, default={}, nullable=True)
     error_details = Column(JSONB, nullable=True)
+    triggered_by = Column(String, nullable=True)
     started_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
 
     blueprint = relationship("WorkflowBlueprint", back_populates="instances")
     tasks = relationship("Task", back_populates="workflow_instance", cascade="all, delete-orphan")

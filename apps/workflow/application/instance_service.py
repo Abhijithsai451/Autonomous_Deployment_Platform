@@ -1,215 +1,225 @@
-from datetime import datetime
-from fastapi import HTTPException
+from datetime import datetime, timezone
 from typing import Optional, List
 from uuid import UUID
+
+from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
+
 from apps.workflow.domain.outbox import OutboxEvent, OutboxStatus
-from apps.workflow.domain.task_dependencies import TaskDependency
 from apps.workflow.domain.tasks import Task, TaskStatus
 from apps.workflow.domain.workflow_events import WorkflowEvent
 from apps.workflow.domain.workflow_instance import WorkflowInstance, WorkflowStatus
-from infrastructure.nats.nats_client import EventBus
+
 
 class InstanceService:
-    def __init__(self, db:Session):
+    def __init__(self, db: Session):
         self.db = db
 
-    def _log_event(self, instance_id: UUID, event_type: str, payload: dict, task_id: Optional[UUID] = None)\
-            -> WorkflowEvent:
-        """Stages an audit log event AND an outbox event in the current DB session."""
+    def _log_event(self, instance_id: UUID, event_type: str, payload: dict) -> WorkflowEvent:
+        """Stages an audit event AND an outbox record in the current DB transaction."""
         event = WorkflowEvent(
             workflow_instance_id=instance_id,
-            task_id=task_id,
-            event_type=event_type,
-            payload=payload
+            task_id=None,
+            event_type=f"workflow.events.{event_type}",
+            payload=payload,
         )
         self.db.add(event)
 
         outbox_entry = OutboxEvent(
-            event_type=event_type,
+            event_type=f"workflow.events.{event_type}",
             aggregate_type="WorkflowInstance",
             aggregate_id=instance_id,
-            payload={"instance_id": str(instance_id), **payload},
+            payload={
+                "instance_id": str(instance_id),
+                **payload
+            },
             status=OutboxStatus.PENDING
         )
         self.db.add(outbox_entry)
 
         return event
 
-    async def create_instance(self, blueprint_id: UUID, input_data: dict, started_by: Optional[UUID] = None) -> WorkflowInstance:
+    def create_instance(
+        self,blueprint_id: UUID,input_data: Optional[dict] = None,triggered_by: Optional[str] = "SYSTEM",
+            started_by: Optional[str] = None) -> WorkflowInstance:
+        actor = started_by or triggered_by or "SYSTEM"
         instance = WorkflowInstance(
             blueprint_id=blueprint_id,
             status=WorkflowStatus.PENDING,
-            input_data=input_data,
-            started_by=started_by,
-            started_at=datetime.utcnow()
+            input_data=input_data or {},
+            triggered_by=triggered_by
         )
         self.db.add(instance)
-        self.db.flush()
+        self.db.flush()  # Generates instance.id without committing
 
-        blueprint = instance.blueprint
-        if blueprint and "tasks" in blueprint.definition:
-            created_tasks = {}
-            for task_def in blueprint.definition["tasks"]:
-                task = Task(
-                    workflow_instance_id=instance.id,
-                    task_definition_id=task_def["id"],
-                    name=task_def["name"],
-                    action_type=task_def.get("action_type", "GENERIC"),
-                    status=TaskStatus.PENDING,
-                    input_data=task_def.get("input_data", {})
-                )
-                self.db.add(task)
-                self.db.flush()
-                created_tasks[task_def["id"]] = task.id
-                await EventBus.publish("TaskCreated", {"instance_id": str(instance.id), "task_id": str(task.id)})
+        self._log_event(
+            instance_id=instance.id,
+            event_type="WorkflowCreated",
+            payload={"blueprint_id": str(blueprint_id), "triggered_by": triggered_by}
+        )
 
-            for task_def in blueprint.definition["tasks"]:
-                if "depends_on" in task_def:
-                    current_task_id = created_tasks[task_def["id"]]
-                    for dep_def_id in task_def["depends_on"]:
-                        dep_task_id = created_tasks[dep_def_id]
-                        dep = TaskDependency(task_id=current_task_id, depends_on_task_id=dep_task_id)
-                        self.db.add(dep)
-            self.db.commit()
+        self.db.commit()
+        self.db.refresh(instance)
+        return instance
+
+    def start_instance(self, instance_id: UUID) -> WorkflowInstance:
+        """Starts a workflow instance and unlocks initial root tasks (tasks with no dependencies)."""
+        instance = self.db.get(WorkflowInstance, instance_id)
+        if not instance:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"WorkflowInstance with ID {instance_id} not found."
+            )
 
         instance.status = WorkflowStatus.RUNNING
-        self.db.commit()
+        instance.started_at = datetime.now(timezone.utc)
 
-        await self._log_event(instance.id, "WorkflowStarted", {"input": input_data})
-        await EventBus.publish("WorkflowStarted", {"id": str(instance.id), "blueprint_id": str(blueprint_id)})
-        return instance
+        self._log_event(
+            instance_id=instance.id,
+            event_type="WorkflowStarted",
+            payload={"blueprint_id": str(instance.blueprint_id)}
+        )
 
-    async def start_instance(self, instance_id: UUID) -> WorkflowInstance:
-        """
-        Triggers execution:
-        1. Invokes domain method instance.start() (PENDING -> RUNNING)
-        2. Unlocks root tasks (tasks with 0 dependencies) -> READY
-        3. Records audit log event
-        """
-        instance = self.db.query(WorkflowInstance).get(instance_id)
-        if not instance:
-            raise ValueError(f"WorkflowInstance {instance_id} not found")
+        # Unlock initial root tasks (tasks without dependencies) for this instance
+        root_tasks = (
+            self.db.query(Task)
+            .filter(
+                Task.workflow_instance_id == instance_id,
+                Task.status == TaskStatus.PENDING,
+                ~Task.dependencies.any()  # Root task check
+            )
+            .all()
+        )
 
-        # Guarded transition (PENDING -> RUNNING)
-        instance.start()
-
-        # Mark root tasks (tasks without dependencies) as READY
-        for task in instance.tasks:
-            if not task.dependencies and task.status == TaskStatus.PENDING:
-                task.mark_ready()
-
-        self._log_event(instance.id, "WorkflowStarted", {"started_at": str(instance.started_at)})
-
-        self.db.commit()
-        self.db.refresh(instance)
-        return instance
-
-    async def pause_instance(self, instance_id: UUID) -> WorkflowInstance:
-        instance = self.db.query(WorkflowInstance).get(instance_id)
-        if not instance:
-            raise ValueError(f"WorkflowInstance {instance_id} not found")
-
-        instance.pause()
-        self._log_event(instance.id, "WorkflowPaused", {})
+        for task in root_tasks:
+            task.status = TaskStatus.READY
+            self._log_event(
+                instance_id=instance.id,
+                event_type="TaskReady",
+                payload={"task_id": str(task.id), "action_type": task.action_type}
+            )
 
         self.db.commit()
         self.db.refresh(instance)
         return instance
 
-    async def resume_instance(self, instance_id: UUID) -> WorkflowInstance:
-        instance = self.db.query(WorkflowInstance).get(instance_id)
+    def complete_instance(self, instance_id: UUID, output_data: Optional[dict] = None) -> WorkflowInstance:
+        """Marks a workflow instance as COMPLETED."""
+        instance = self.db.get(WorkflowInstance, instance_id)
         if not instance:
-            raise ValueError(f"WorkflowInstance {instance_id} not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"WorkflowInstance with ID {instance_id} not found."
+            )
 
-        instance.resume()
-        self._log_event(instance.id, "WorkflowResumed", {})
+        instance.status = WorkflowStatus.COMPLETED
+        instance.completed_at = datetime.now(timezone.utc)
+        if output_data:
+            instance.output_data = output_data
+
+        self._log_event(
+            instance_id=instance.id,
+            event_type="WorkflowCompleted",
+            payload={"status": instance.status.value}
+        )
 
         self.db.commit()
         self.db.refresh(instance)
         return instance
 
-    async def cancel_instance(self, instance_id: UUID, reason: str = "User cancelled execution") -> WorkflowInstance:
-        instance = self.db.query(WorkflowInstance).get(instance_id)
+    def fail_instance(self, instance_id: UUID, error_details: Optional[dict] = None) -> WorkflowInstance:
+        """Marks a workflow instance as FAILED."""
+        instance = self.db.get(WorkflowInstance, instance_id)
         if not instance:
-            raise ValueError(f"WorkflowInstance {instance_id} not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"WorkflowInstance with ID {instance_id} not found."
+            )
 
-        instance.cancel(reason=reason)
+        instance.status = WorkflowStatus.FAILED
+        instance.completed_at = datetime.now(timezone.utc)
+        if error_details:
+            instance.error_details = error_details
 
-        # Also cancel all active/pending tasks
-        for task in instance.tasks:
-            if task.status in {TaskStatus.PENDING, TaskStatus.READY, TaskStatus.RUNNING}:
-                task.cancel(reason=f"Workflow cancelled: {reason}")
-
-        self._log_event(instance.id, "WorkflowCancelled", {"reason": reason})
+        self._log_event(
+            instance_id=instance.id,
+            event_type="WorkflowFailed",
+            payload={"status": instance.status.value, "error": error_details}
+        )
 
         self.db.commit()
         self.db.refresh(instance)
         return instance
 
-    async def get_instances(self, limit: int = 100, offset: int = 0) -> List[WorkflowInstance]:
+    def get_instance_by_id(self, instance_id: UUID) -> WorkflowInstance:
+        instance = self.db.get(WorkflowInstance, instance_id)
+        if not instance:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"WorkflowInstance with ID {instance_id} not found."
+            )
+        return instance
+
+    def list_instances(self, limit: int = 100, offset: int = 0) -> List[WorkflowInstance]:
         return self.db.query(WorkflowInstance).offset(offset).limit(limit).all()
 
-    async def get_instance_by_id(self, instance_id: UUID) -> WorkflowInstance:
-        instance = self.db.query(WorkflowInstance).filter(WorkflowInstance.id == instance_id).first()
-        if not instance:
-            raise HTTPException(status_code=404, detail=f"Workflow instance not found with id {instance_id}")
+    def get_instances(self, limit: int = 100, offset: int = 0) -> List[WorkflowInstance]:
+        return self.list_instances(limit=limit, offset=offset)
+
+    def pause_instance(self, instance_id: UUID) -> WorkflowInstance:
+        instance = self.get_instance_by_id(instance_id)
+        instance.status = WorkflowStatus.PAUSED
+        self._log_event(instance.id, "WorkflowPaused", {})
+        self.db.commit()
+        self.db.refresh(instance)
         return instance
 
-    async def retry_instance(self, instance_id: UUID) -> WorkflowInstance:
-        instance = await self.get_instance_by_id(instance_id)
+    def resume_instance(self, instance_id: UUID) -> WorkflowInstance:
+        instance = self.get_instance_by_id(instance_id)
+        instance.status = WorkflowStatus.RUNNING
+        self._log_event(instance.id, "WorkflowResumed", {})
+        self.db.commit()
+        self.db.refresh(instance)
+        return instance
 
-        # Domain-guarded transition (FAILED -> RUNNING)
-        instance.retry()
+    def cancel_instance(self, instance_id: UUID, reason: str = "Cancelled") -> WorkflowInstance:
+        instance = self.get_instance_by_id(instance_id)
+        instance.status = WorkflowStatus.CANCELLED
+        instance.completed_at = datetime.now(timezone.utc)
+        self._log_event(instance.id, "WorkflowCancelled", {"reason": reason})
+        self.db.commit()
+        self.db.refresh(instance)
+        return instance
 
+    def retry_instance(self, instance_id: UUID) -> WorkflowInstance:
+        instance = self.get_instance_by_id(instance_id)
+        instance.status = WorkflowStatus.RUNNING
         self._log_event(instance.id, "WorkflowRetried", {})
         self.db.commit()
         self.db.refresh(instance)
         return instance
 
-    async def signal_instance(self, instance_id: UUID, signal_name: str, payload: dict) -> WorkflowInstance:
-        instance = await self.get_instance_by_id(instance_id)
-
-        # Audit event logged inside DB session
-        self._log_event(instance.id, f"SignalReceived:{signal_name}", payload)
+    def timeout_instance(self, instance_id: UUID) -> WorkflowInstance:
+        instance = self.get_instance_by_id(instance_id)
+        instance.status = WorkflowStatus.FAILED
+        instance.completed_at = datetime.now(timezone.utc)
+        self._log_event(instance.id, "WorkflowTimedOut", {"reason": "Timeout reached"})
         self.db.commit()
         self.db.refresh(instance)
         return instance
 
-    async def complete_instance(self, instance_id: UUID, output_data: dict = {}) -> WorkflowInstance:
-        instance = await self.get_instance_by_id(instance_id)
-
-        # Domain-guarded transition (RUNNING -> COMPLETED)
-        instance.complete(output_data=output_data)
-
-        self._log_event(instance.id, "WorkflowCompleted", {"output": output_data})
+    def signal_instance(self, instance_id: UUID, signal_name: str, payload: dict = None) -> WorkflowInstance:
+        instance = self.get_instance_by_id(instance_id)
+        self._log_event(instance.id, f"SignalReceived.{signal_name}", payload or {})
         self.db.commit()
         self.db.refresh(instance)
         return instance
 
-    async def fail_instance(self, instance_id: UUID, error_details: dict = {}) -> WorkflowInstance:
-        instance = await self.get_instance_by_id(instance_id)
-
-        # Domain-guarded transition (RUNNING -> FAILED)
-        instance.fail(error_details=error_details)
-
-        self._log_event(instance.id, "WorkflowFailed", {"error": error_details})
-        self.db.commit()
-        self.db.refresh(instance)
-        return instance
-
-    async def timeout_instance(self, instance_id: UUID, reason: str = "Execution timeout reached") -> WorkflowInstance:
-        instance = await self.get_instance_by_id(instance_id)
-
-        # Domain-guarded transition (RUNNING -> TIMED_OUT)
-        instance.timeout(reason=reason)
-
+    def timeout_instance(self, instance_id: UUID, reason: str = "Timeout reached") -> WorkflowInstance:
+        instance = self.get_instance_by_id(instance_id)
+        instance.status = WorkflowStatus.FAILED
+        instance.completed_at = datetime.now(timezone.utc)
         self._log_event(instance.id, "WorkflowTimedOut", {"reason": reason})
         self.db.commit()
         self.db.refresh(instance)
         return instance
-    async def update_workflow_instance(self, updates: dict):
-        pass
-
-    async def update_workflow_instance_status(self, status):
-        pass

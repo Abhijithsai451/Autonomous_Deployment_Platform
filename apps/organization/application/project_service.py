@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from apps.organization.domain.project import Project, ProjectStatus
-from infrastructure.nats.nats_client import EventBus
+from apps.organization.infrastructure.org_nats_client import org_nats_client as nats
 
 
 class ProjectService:
@@ -16,7 +16,7 @@ class ProjectService:
         self.db.add(project)
         self.db.commit()
         self.db.refresh(project)
-        await EventBus.publish("ProjectCreated", {"id": str(project.id), "description":str(project.description)})
+        await nats.publish("ProjectCreated", {"id": str(project.id), "description":str(project.description)})
         return project
 
     async def update_project_data(self, project_id: UUID,updates: dict )-> Project:
@@ -28,7 +28,7 @@ class ProjectService:
                     setattr(project, attr_name, v)
             self.db.commit()
             self.db.refresh(project)
-            await EventBus.publish("ProjectDataUpdated", {"id": str(project.id)})
+            await nats.publish("ProjectDataUpdated", {"id": str(project.id)})
         return project
 
     async def update_project_status(self, project_id:UUID, status: str):
@@ -37,14 +37,14 @@ class ProjectService:
             project.status = ProjectStatus(status)
             if project.status == ProjectStatus.UPDATED:
                 self.db.commit()
-                await EventBus.publish("ProjectUpdated", {"id": str(project.id), "status": "UPDATED"})
+                await nats.publish("ProjectUpdated", {"id": str(project.id), "status": "UPDATED"})
             if project.status == ProjectStatus.DELETED:
                 self.db.commit()
-                await EventBus.publish("ProjectDeleted", {"id": str(project.id), "status": "DELETED"})
+                await nats.publish("ProjectDeleted", {"id": str(project.id), "status": "DELETED"})
             if project.status == ProjectStatus.ARCHIVED:
                 self.db.commit()
-                await EventBus.publish("ProjectArchived",{"id": str(project.id), "status": "ARCHIVED"})
+                await nats.publish("ProjectArchived",{"id": str(project.id), "status": "ARCHIVED"})
         else:
-            await EventBus.publish("ProjectNotFound", {"id": str(Project.id)})
+            await nats.publish("ProjectNotFound", {"id": str(Project.id)})
             raise HTTPException(status_code=404, detail=f"Organization not found with id {project_id}")
 

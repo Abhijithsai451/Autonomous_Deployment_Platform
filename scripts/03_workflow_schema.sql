@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS workflow.workflow_instances (
     input_data JSONB DEFAULT '{}'::jsonb,
     output_data JSONB DEFAULT '{}'::jsonb,
     error_details JSONB,
+    triggered_by VARCHAR(255),
     started_at TIMESTAMP WITH TIME ZONE,
     completed_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
@@ -138,12 +139,13 @@ VALUES
 ('Model Training', 'ML Pipeline for training classifiers', 2, '{"steps": ["data_fetch", "preprocess", "train", "eval"]}'::jsonb),
 ('Approval Chain', 'Standard multi-step approval workflow', 1, '{"steps": ["submit", "manager_review", "exec_review"]}'::jsonb);
 
-INSERT INTO workflow.workflow_instances (blueprint_id, status, current_step, started_by, input_data)
+INSERT INTO workflow.workflow_instances (blueprint_id, status, current_step, started_by, triggered_by, input_data)
 SELECT
     (SELECT id FROM workflow.workflow_blueprints ORDER BY random() LIMIT 1),
     (ARRAY['PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'WAITING_FOR_APPROVAL'])[floor(random() * 5 + 1)]::workflow.workflow_status,
     'step_' || floor(random() * 5 + 1),
     gen_random_uuid(),
+    (ARRAY['user:admin@cortex.ops', 'system:github-actions', 'api_key:service-account-ci', 'user:developer@cortex.ops'])[floor(random() * 4 + 1)],
     jsonb_build_object('request_id', 'REQ-' || i, 'priority', floor(random() * 3))
 FROM generate_series(1, 20) i;
 

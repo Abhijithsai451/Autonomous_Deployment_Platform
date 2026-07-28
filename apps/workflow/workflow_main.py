@@ -6,10 +6,10 @@ from fastapi import FastAPI
 from apps.workflow.api.v1 import blueprint_api, instance_api, task_api, timeline_api
 from apps.workflow.infrastructure.outbox_publisher import OutboxPublisher
 from apps.workflow.infrastructure.structured_logs import struct_logger as logger
-from infrastructure.nats.nats_client import EventBus
+from apps.workflow.infrastructure.workflow_nats_client import workflow_nats_client as nats
 
 
-outbox_worker = OutboxPublisher(poll_interval_seconds=1.0)
+outbox_worker = OutboxPublisher(poll_interval_seconds=0.01)
 
 async def example_workflow_logging_handler(payload: dict, metadata: dict):
     logger.info(f"Received event tracking hook: {metadata.get('event_type')} - ID: {payload.get('id')}")
@@ -17,27 +17,23 @@ async def example_workflow_logging_handler(payload: dict, metadata: dict):
 
 @asynccontextmanager
 async def workflow_lifespan(app: FastAPI):
-    # Startup: Establish NATS connection for both Publisher & EventSubscriber
-    await EventBus.initialize()
+    await nats.initialize()
     logger.info("NATS Messaging Core successfully initialized.")
 
     outbox_task = asyncio.create_task(outbox_worker.start())
     logger.info("Outbox Publisher Worker started successfully.")
 
-    # Register any specific event listeners your service needs to audit/consume
-    await EventBus.register_listener(
-        stream="workflow_events",
-        subject="workflow.Initialized",
-        durable_name="workflow-service-user-invited-worker",
+    await nats.register_listener(
+        subject="Initialized",
+        durable_name="workflow-task-ready-worker",
         handler=example_workflow_logging_handler
         )
     yield
-    # Shutdown: Disconnect cleanly from the NATS clusters
 
     outbox_worker.stop()
     await outbox_task
 
-    await EventBus.shutdown()
+    await nats.shutdown()
     logger.info("NATS Messaging Core successfully disconnected.")
 
 app = FastAPI(title="CortexOps Workflow Service", lifespan= workflow_lifespan)

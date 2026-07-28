@@ -19,9 +19,9 @@ class CreateBlueprintSchema(BaseModel):
 
 
 @router.post("")
-async def create_blueprint(payload: CreateBlueprintSchema, db: Session = Depends(workflow_db_session)):
+def create_blueprint(payload: CreateBlueprintSchema, db: Session = Depends(workflow_db_session)):
     svc = BlueprintService(db)
-    return await svc.create_blueprint(
+    return svc.create_blueprint(
         name=payload.name,
         definition=payload.definition,
         description=payload.description,
@@ -30,18 +30,18 @@ async def create_blueprint(payload: CreateBlueprintSchema, db: Session = Depends
 
 
 @router.get("")
-async def list_blueprints(limit: int = 100, offset: int = 0, db: Session = Depends(workflow_db_session)):
+def list_blueprints(limit: int = 100, offset: int = 0, db: Session = Depends(workflow_db_session)):
     svc = BlueprintService(db)
-    return await svc.get_blueprints(limit=limit, offset=offset)
+    return  svc.get_blueprints(limit=limit, offset=offset)
 
 
 @router.get("/{id}")
-async def get_blueprint(id: UUID, db: Session = Depends(workflow_db_session)):
+def get_blueprint(id: UUID, db: Session = Depends(workflow_db_session)):
     svc = BlueprintService(db)
-    return await svc.get_blueprint_by_id(id)
+    return  svc.get_blueprint_by_id(id)
 
 
 @router.patch("/{id}")
-async def patch_blueprint(id: UUID, payload: dict, db: Session = Depends(workflow_db_session)):
+def patch_blueprint(id: UUID, payload: dict, db: Session = Depends(workflow_db_session)):
     svc = BlueprintService(db)
-    return await svc.update_blueprint(id, payload)
+    return  svc.update_blueprint(id, payload)
