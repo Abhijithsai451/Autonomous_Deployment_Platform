@@ -14,6 +14,7 @@ class OutboxStatus(str, enum.Enum):
     PROCESSING = "PROCESSING"
     PROCESSED = "PROCESSED"
     FAILED = "FAILED"
+    DEAD_LETTER = "DEADLETTER"
 
 class OutboxEvent(Base):
     __tablename__ = "outbox_events"
