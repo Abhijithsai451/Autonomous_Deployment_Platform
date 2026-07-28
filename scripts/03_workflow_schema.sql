@@ -114,9 +114,18 @@ CREATE TABLE IF NOT EXISTS workflow.outbox_events (
     status workflow.outbox_status NOT NULL DEFAULT 'PENDING',
     retry_count INT NOT NULL DEFAULT 0,
     error_message TEXT,
+    max_retries INT NOT NULL DEFAULT 5,
+    last_error TEXT DEFAULT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
     processed_at TIMESTAMP WITH TIME ZONE
 );
+
+CREATE TABLE IF NOT EXISTS workflow.processed_events (
+    event_id VARCHAR(255) PRIMARY KEY,
+    consumer_group VARCHAR(100) NOT NULL,
+    processed_at TIMESTAMP WITH TIME ZONE DEFAULT  CURRENT_TIMESTAMP NOT NULL
+);
+
 
 CREATE INDEX IF NOT EXISTS idx_instances_blueprint ON workflow.workflow_instances(blueprint_id);
 CREATE INDEX IF NOT EXISTS idx_instances_status ON workflow.workflow_instances(status);
@@ -126,6 +135,7 @@ CREATE INDEX IF NOT EXISTS idx_events_instance ON workflow.workflow_events(workf
 CREATE INDEX IF NOT EXISTS idx_outbox_status ON workflow.outbox_events(status);
 CREATE INDEX IF NOT EXISTS idx_outbox_event_type ON workflow.outbox_events(event_type);
 CREATE INDEX IF NOT EXISTS idx_outbox_aggregate ON workflow.outbox_events(aggregate_type, aggregate_id);
+CREATE INDEX IF NOT EXISTS idx_processed_events ON workflow.processed_events(consumer_group,processed_at);
 -- ========================================================
 -- SEED DATA
 -- ========================================================

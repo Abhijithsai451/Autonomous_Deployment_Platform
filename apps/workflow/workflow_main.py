@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from apps.workflow.api.v1 import blueprint_api, instance_api, task_api, timeline_api
+from apps.workflow.application.idempotency_service import idempotent_listener
 from apps.workflow.infrastructure.outbox_publisher import OutboxPublisher
 from apps.workflow.infrastructure.structured_logs import struct_logger as logger
 from apps.workflow.infrastructure.workflow_nats_client import workflow_nats_client as nats
@@ -22,12 +23,11 @@ async def workflow_lifespan(app: FastAPI):
 
     outbox_task = asyncio.create_task(outbox_worker.start())
     logger.info("Outbox Publisher Worker started successfully.")
-
+    durable_name = "workflow-task-ready-worker"
     await nats.register_listener(
         subject="Initialized",
-        durable_name="workflow-task-ready-worker",
-        handler=example_workflow_logging_handler
-        )
+        durable_name=durable_name,
+        handler=idempotent_listener(consumer_group=durable_name)(example_workflow_logging_handler))
     yield
 
     outbox_worker.stop()

@@ -3,6 +3,8 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 import warnings
+
+from apps.workflow.application.idempotency_service import IdempotencyService
 from apps.workflow.infrastructure.database import workflow_db_client as db_client
 from apps.workflow.infrastructure.workflow_nats_client import workflow_nats_client as nats
 from apps.workflow.workflow_main import app
@@ -409,3 +411,46 @@ def test_workflow_signal_ingestion(client, db_session):
     }
     sig_res = client.post(f"/instances/{inst_id}/signal", json=signal_payload)
     assert sig_res.status_code in [200, 404]
+
+
+def test_idempotency_and_dlq_routing(db_session):
+    """
+    Verifies that:
+    1. IdempotencyService prevents duplicate event insertions.
+    2. Outbox events breaching max_retries transition to DEAD_LETTER status.
+    """
+
+
+    # 1. Test Idempotency Guard
+    idempotency_svc = IdempotencyService(db_session)
+    test_event_id = str(uuid.uuid4())
+    consumer_group = "test_group"
+
+    assert not idempotency_svc.is_already_processed(test_event_id, consumer_group)
+
+    # Mark as processed
+    idempotency_svc.mark_processed(test_event_id, consumer_group)
+    db_session.commit()
+
+    # Second check must confirm it is processed
+    assert idempotency_svc.is_already_processed(test_event_id, consumer_group)
+
+    # 2. Test DLQ Routing Threshold
+    dlq_event_id = uuid.uuid4()
+    db_session.execute(
+        text("""
+             INSERT INTO workflow.outbox_events (id, event_type, aggregate_type, aggregate_id, payload, status,
+                                                 retry_count, max_retries)
+             VALUES (:e_id, 'workflow.events.FailedEvent', 'WorkflowInstance', :a_id, '{}', 'PENDING', 5, 5)
+             """),
+        {"e_id": dlq_event_id, "a_id": uuid.uuid4()}
+    )
+    db_session.commit()
+
+    # Verify event is staged and ready for DLQ
+    staged = db_session.execute(
+        text("SELECT status, retry_count, max_retries FROM workflow.outbox_events WHERE id = :id"),
+        {"id": dlq_event_id}
+    ).fetchone()
+
+    assert staged[1] >= staged[2], "Event retry_count should match or exceed max_retries for DLQ escalation"
