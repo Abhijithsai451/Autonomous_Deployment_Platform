@@ -8,6 +8,6 @@ from apps.workflow.infrastructure.database import workflow_db_session
 router = APIRouter(prefix="/instances", tags=["Timeline"])
 
 @router.get("/{id}/timeline")
-async def get_instance_timeline(id: UUID, db: Session = Depends(workflow_db_session)):
+def get_instance_timeline(id: UUID, db: Session = Depends(workflow_db_session)):
     svc = TimelineService(db)
-    return await svc.get_instance_timeline(id)
+    return svc.get_instance_timeline(id)

@@ -4,9 +4,10 @@ from uuid import uuid4
 from enum import Enum as PyEnum
 from sqlalchemy import Column, UUID, String, DateTime, Enum, ForeignKey, Integer
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, foreign
 
 from apps.workflow.domain.exceptions import InvalidStateTransitionError
+from apps.workflow.domain.task_dependencies import TaskDependency
 from apps.workflow.infrastructure.base import Base
 
 class TaskStatus(PyEnum):
@@ -42,14 +43,23 @@ class Task(Base):
 
     workflow_instance = relationship("WorkflowInstance", back_populates="tasks")
     events = relationship("WorkflowEvent", back_populates="task")
-
+    """
     dependencies = relationship(
         "Task",
         secondary="workflow.task_dependencies",
-        primaryjoin="Task.id == TaskDependency.task_id",
-        secondaryjoin="Task.id == TaskDependency.depends_on_task_id",
+        primaryjoin="Task.id == foreign(TaskDependency.task_id)",
+        secondaryjoin="Task.id == foreign(TaskDependency.depends_on_task_id)",
         backref="depended_on_by",
         overlaps="depended_on_by"
+    )
+    """
+    dependencies = relationship(
+        "Task",
+        secondary=TaskDependency.__table__,
+        primaryjoin=id == foreign(TaskDependency.task_id),
+        secondaryjoin=id == foreign(TaskDependency.depends_on_task_id),
+        backref="depended_on_by",
+        overlaps="depended_on_by",
     )
 
     # ========================================================

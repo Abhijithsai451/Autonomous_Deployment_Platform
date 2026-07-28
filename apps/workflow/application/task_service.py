@@ -5,6 +5,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from apps.workflow.application.dependency_engine import TaskDependencyEngine
 from apps.workflow.domain.exceptions import InvalidStateTransitionError
 from apps.workflow.domain.outbox import OutboxEvent, OutboxStatus
 from apps.workflow.domain.tasks import Task, TaskStatus
@@ -14,6 +15,7 @@ from apps.workflow.domain.workflow_events import WorkflowEvent
 class TaskService:
     def __init__(self, db:Session):
         self.db = db
+        self.dependency_engine = TaskDependencyEngine(db)
 
     def _log_event(self,instance_id: UUID,task_id: UUID,event_type: str,payload: dict) -> WorkflowEvent:
         event = WorkflowEvent(
@@ -39,7 +41,7 @@ class TaskService:
 
         return event
 
-    async def get_task_by_id(self, task_id: UUID) -> Task:
+    def get_task_by_id(self, task_id: UUID) -> Task:
         task = self.db.query(Task).filter(Task.id == task_id).first()
         if not task:
             raise HTTPException(
@@ -48,11 +50,11 @@ class TaskService:
             )
         return task
 
-    async def get_tasks_by_instance(self, instance_id: UUID) -> List[Task]:
+    def get_tasks_by_instance(self, instance_id: UUID) -> List[Task]:
         return self.db.query(Task).filter(Task.workflow_instance_id == instance_id).all()
 
-    async def mark_task_ready(self, task_id: UUID) -> Task:
-        task = await self.get_task_by_id(task_id)
+    def mark_task_ready(self, task_id: UUID) -> Task:
+        task =  self.get_task_by_id(task_id)
         task.mark_ready()
 
         self._log_event(task.workflow_instance_id, task.id, "TaskReady", {})
@@ -60,8 +62,8 @@ class TaskService:
         self.db.refresh(task)
         return task
 
-    async def start_task(self, task_id: UUID, assigned_agent_id: Optional[UUID] = None) -> Task:
-        task = await self.get_task_by_id(task_id)
+    def start_task(self, task_id: UUID, assigned_agent_id: Optional[UUID] = None) -> Task:
+        task = self.get_task_by_id(task_id)
 
         task.start()
         if assigned_agent_id:
@@ -77,7 +79,7 @@ class TaskService:
         self.db.refresh(task)
         return task
 
-    async def complete_task(self, task_id: UUID, output_data: dict = None) -> Task:
+    def complete_task(self, task_id: UUID, output_data: dict = None) -> Task:
         task = self.db.get(Task, task_id)
         if not task:
             raise ValueError(f"Task with ID {task_id} not found.")
@@ -100,7 +102,7 @@ class TaskService:
         self.db.refresh(task)
         return task
 
-    async def fail_task(self, task_id: UUID, error_details: dict = None) -> Task:
+    def fail_task(self, task_id: UUID, error_details: dict = None) -> Task:
         task = self.db.get(Task, task_id)
         if not task:
             raise ValueError(f"Task with ID {task_id} not found.")
@@ -122,8 +124,8 @@ class TaskService:
         self.db.refresh(task)
         return task
 
-    async def retry_task(self, task_id: UUID) -> Task:
-        task = await self.get_task_by_id(task_id)
+    def retry_task(self, task_id: UUID) -> Task:
+        task = self.get_task_by_id(task_id)
         task.retry()
 
         self._log_event(
@@ -136,8 +138,8 @@ class TaskService:
         self.db.refresh(task)
         return task
 
-    async def cancel_task(self, task_id: UUID, reason: str = "Cancelled by user") -> Task:
-        task = await self.get_task_by_id(task_id)
+    def cancel_task(self, task_id: UUID, reason: str = "Cancelled by user") -> Task:
+        task = self.get_task_by_id(task_id)
 
         task.cancel(reason=reason)
 
@@ -146,13 +148,13 @@ class TaskService:
         self.db.refresh(task)
         return task
 
-    async def request_approval(
+    def request_approval(
             self,
             task_id: UUID,
             required_approvers: list = [],
             details: dict = {}
     ) -> Task:
-        task = await self.get_task_by_id(task_id)
+        task = self.get_task_by_id(task_id)
         if task.status == TaskStatus.READY:
             task.start()
 
@@ -163,13 +165,13 @@ class TaskService:
         self.db.refresh(task)
         return task
 
-    async def receive_approval(
+    def receive_approval(
             self,
             task_id: UUID,
             approved_by: str,
             approval_metadata: dict = {}
     ) -> Task:
-        task = await self.get_task_by_id(task_id)
+        task = self.get_task_by_id(task_id)
 
         if task.status != TaskStatus.RUNNING:
             raise InvalidStateTransitionError("Task", str(task.id), task.status.value, "receive_approval")

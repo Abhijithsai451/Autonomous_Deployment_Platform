@@ -40,12 +40,9 @@ class InstanceService:
         return event
 
     def create_instance(
-        self,
-        blueprint_id: UUID,
-        input_data: Optional[dict] = None,
-        triggered_by: Optional[str] = "SYSTEM"
-    ) -> WorkflowInstance:
-        """Creates a new workflow instance in PENDING status and stages creation event."""
+        self,blueprint_id: UUID,input_data: Optional[dict] = None,triggered_by: Optional[str] = "SYSTEM",
+            started_by: Optional[str] = None) -> WorkflowInstance:
+        actor = started_by or triggered_by or "SYSTEM"
         instance = WorkflowInstance(
             blueprint_id=blueprint_id,
             status=WorkflowStatus.PENDING,
@@ -165,3 +162,66 @@ class InstanceService:
 
     def list_instances(self, limit: int = 100, offset: int = 0) -> List[WorkflowInstance]:
         return self.db.query(WorkflowInstance).offset(offset).limit(limit).all()
+
+    def get_instances(self, limit: int = 100, offset: int = 0) -> List[WorkflowInstance]:
+        return self.list_instances(limit=limit, offset=offset)
+
+    # apps/workflow/application/instance_service.py
+
+    def pause_instance(self, instance_id: UUID) -> WorkflowInstance:
+        instance = self.get_instance_by_id(instance_id)
+        instance.status = WorkflowStatus.PAUSED
+        self._log_event(instance.id, "WorkflowPaused", {})
+        self.db.commit()
+        self.db.refresh(instance)
+        return instance
+
+    def resume_instance(self, instance_id: UUID) -> WorkflowInstance:
+        instance = self.get_instance_by_id(instance_id)
+        instance.status = WorkflowStatus.RUNNING
+        self._log_event(instance.id, "WorkflowResumed", {})
+        self.db.commit()
+        self.db.refresh(instance)
+        return instance
+
+    def cancel_instance(self, instance_id: UUID, reason: str = "Cancelled") -> WorkflowInstance:
+        instance = self.get_instance_by_id(instance_id)
+        instance.status = WorkflowStatus.CANCELLED
+        instance.completed_at = datetime.now(timezone.utc)
+        self._log_event(instance.id, "WorkflowCancelled", {"reason": reason})
+        self.db.commit()
+        self.db.refresh(instance)
+        return instance
+
+    def retry_instance(self, instance_id: UUID) -> WorkflowInstance:
+        instance = self.get_instance_by_id(instance_id)
+        instance.status = WorkflowStatus.RUNNING
+        self._log_event(instance.id, "WorkflowRetried", {})
+        self.db.commit()
+        self.db.refresh(instance)
+        return instance
+
+    def timeout_instance(self, instance_id: UUID) -> WorkflowInstance:
+        instance = self.get_instance_by_id(instance_id)
+        instance.status = WorkflowStatus.FAILED
+        instance.completed_at = datetime.now(timezone.utc)
+        self._log_event(instance.id, "WorkflowTimedOut", {"reason": "Timeout reached"})
+        self.db.commit()
+        self.db.refresh(instance)
+        return instance
+
+    def signal_instance(self, instance_id: UUID, signal_name: str, payload: dict = None) -> WorkflowInstance:
+        instance = self.get_instance_by_id(instance_id)
+        self._log_event(instance.id, f"SignalReceived.{signal_name}", payload or {})
+        self.db.commit()
+        self.db.refresh(instance)
+        return instance
+
+    def timeout_instance(self, instance_id: UUID, reason: str = "Timeout reached") -> WorkflowInstance:
+        instance = self.get_instance_by_id(instance_id)
+        instance.status = WorkflowStatus.FAILED
+        instance.completed_at = datetime.now(timezone.utc)
+        self._log_event(instance.id, "WorkflowTimedOut", {"reason": reason})
+        self.db.commit()
+        self.db.refresh(instance)
+        return instance

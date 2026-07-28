@@ -12,14 +12,7 @@ class BlueprintService:
     def __init__(self, db: Session):
         self.db = db
 
-    def _log_event(self, blueprint_id: UUID, event_type: str, payload: dict) -> WorkflowEvent:
-        event = WorkflowEvent(
-            workflow_instance_id=None,
-            task_id=None,
-            event_type=f"workflow.events.{event_type}",
-            payload=payload,
-        )
-        self.db.add(event)
+    def _log_event(self, blueprint_id: UUID, event_type: str, payload: dict) -> OutboxEvent:
 
         outbox_entry = OutboxEvent(
             event_type=f"workflow.events.{event_type}",
@@ -33,7 +26,7 @@ class BlueprintService:
         )
         self.db.add(outbox_entry)
 
-        return event
+        return outbox_entry
 
     def create_blueprint(
         self, 

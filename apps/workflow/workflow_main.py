@@ -9,7 +9,7 @@ from apps.workflow.infrastructure.structured_logs import struct_logger as logger
 from apps.workflow.infrastructure.workflow_nats_client import workflow_nats_client as nats
 
 
-outbox_worker = OutboxPublisher(poll_interval_seconds=1.0)
+outbox_worker = OutboxPublisher(poll_interval_seconds=0.01)
 
 async def example_workflow_logging_handler(payload: dict, metadata: dict):
     logger.info(f"Received event tracking hook: {metadata.get('event_type')} - ID: {payload.get('id')}")
