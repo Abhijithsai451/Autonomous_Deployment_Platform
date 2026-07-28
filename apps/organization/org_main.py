@@ -3,8 +3,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from apps.organization.api.v1 import organization_api, project_api, department_api
+from apps.organization.infrastructure.org_nats_client import org_nats_client as nats
 from apps.organization.infrastructure.structured_logs import struct_logger as logger
-from infrastructure.nats.nats_client import EventBus
 from packages.logging.structured_logs import StructuredLogger
 
 log_manager = StructuredLogger(
@@ -18,20 +18,16 @@ async def example_organization_logging_handler(payload: dict, metadata: dict):
 
 @asynccontextmanager
 async def organization_lifespan(app: FastAPI):
-    # 1. Startup: Establish NATS connection for both Publisher & EventSubscriber
-    await EventBus.initialize()
+    await nats.initialize()
     logger.info("NATS Messaging Core successfully initialized.")
 
-    # 2. Optional: Register any specific event listeners your service needs to audit/consume
-    await EventBus.register_listener(
-        stream="organization_events",
-        subject="organization.UserInvited",
+    await nats.register_listener(
+        subject="UserInvited",
         durable_name="organization-service-user-invited-worker",
         handler=example_organization_logging_handler
         )
     yield
-    # 3. Shutdown: Disconnect cleanly from the NATS clusters
-    await EventBus.shutdown()
+    await nats.shutdown()
     logger.info("NATS Messaging Core successfully disconnected.")
 
 

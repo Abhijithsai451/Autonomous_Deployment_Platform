@@ -4,7 +4,8 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from apps.organization.domain.department import Department, DepartmentStatus
-from infrastructure.nats.nats_client import EventBus
+from apps.organization.infrastructure.org_nats_client import org_nats_client as nats
+
 
 class DepartmentService:
     def __init__(self, db:Session):
@@ -14,7 +15,7 @@ class DepartmentService:
         self.db.add(department)
         self.db.commit()
         self.db.refresh(department)
-        await EventBus.publish("DepartmentCreated", {"id": str(department.id), "description": str(department.description)})
+        await nats.publish("DepartmentCreated", {"id": str(department.id), "description": str(department.description)})
         return department
 
     async def update_department_data(self, department_id:UUID, updates:dict)-> Department:
@@ -26,7 +27,7 @@ class DepartmentService:
                     setattr(department, attr_name, v)
             self.db.commit()
             self.db.refresh(department)
-            await EventBus.publish("DepartmentDataUpdated", {"id":str(department.id)})
+            await nats.publish("DepartmentDataUpdated", {"id":str(department.id)})
         return department
 
     async def update_department_status(self, department_id: UUID, status: str):
@@ -35,14 +36,14 @@ class DepartmentService:
             department.status = DepartmentStatus(status)
             if department.status == DepartmentStatus.UPDATED:
                 self.db.commit()
-                await EventBus.publish("DepartmentUpdated", {"id": str(department.id), "status": "UPDATED"})
+                await nats.publish("DepartmentUpdated", {"id": str(department.id), "status": "UPDATED"})
             if department.status == DepartmentStatus.DELETED:
                 self.db.commit()
-                await EventBus.publish("DepartmentDeleted", {"id": str(department.id), "status": "DELETED"})
+                await nats.publish("DepartmentDeleted", {"id": str(department.id), "status": "DELETED"})
             if department.status == DepartmentStatus.ARCHIVED:
                 self.db.commit()
-                await EventBus.publish("DepartmentArchived", {"id": str(department.id), "status": "ARCHIVED"})
+                await nats.publish("DepartmentArchived", {"id": str(department.id), "status": "ARCHIVED"})
         else:
-            await EventBus.publish("DepartmentNotFound", {"id": str(department.id)})
+            await nats.publish("DepartmentNotFound", {"id": str(department.id)})
             raise HTTPException(status_code=404, detail=f"Organization not found with id {department_id}")
 
