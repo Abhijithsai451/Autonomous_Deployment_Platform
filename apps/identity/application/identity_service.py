@@ -9,8 +9,8 @@ from apps.identity.domain.organization import Organization
 from apps.identity.domain.role import Role
 from apps.identity.domain.service_account import ServiceAccount
 from apps.identity.domain.user import UserStatus, User
+from apps.identity.infrastructure.identity_nats_client import identity_nats_client as nats
 from apps.identity.infrastructure.keycloak_client import KeycloakClient
-from infrastructure.nats.nats_client import EventBus
 
 
 class IdentityService:
@@ -24,7 +24,7 @@ class IdentityService:
         self.db.add(org)
         self.db.commit()
         self.db.refresh(org)
-        await EventBus.publish("OrganizationCreated", {"id": str(org.id), "slug": org.slug})
+        await nats.publish("OrganizationCreated", {"id": str(org.id), "slug": org.slug})
         return org
 
     async def update_organization(self, org_id: UUID, updates: dict) -> Organization:
@@ -33,7 +33,7 @@ class IdentityService:
             for k, v in updates.items():
                 setattr(org, k, v)
             self.db.commit()
-            await EventBus.publish("OrganizationUpdated", {"id": str(org.id)})
+            await nats.publish("OrganizationUpdated", {"id": str(org.id)})
         return org
 
     # --- Users ---
@@ -44,7 +44,7 @@ class IdentityService:
         self.db.add(user)
         self.db.commit()
         self.db.refresh(user)
-        await EventBus.publish("UserInvited", {"id": str(user.id), "email": user.email})
+        await nats.publish("UserInvited", {"id": str(user.id), "email": user.email})
         return user
 
     async def update_user_status(self, user_id: UUID, status: str) -> User:
@@ -53,10 +53,10 @@ class IdentityService:
             user.status = UserStatus(status)
             if user.status == UserStatus.ACTIVE:
                 self.keycloak.enable_external_user(str(user.keycloak_user_id))
-                await EventBus.publish("UserActivated", {"id": str(user.id)})
+                await nats.publish("UserActivated", {"id": str(user.id)})
             elif user.status == UserStatus.DISABLED:
                 self.keycloak.disable_external_user(str(user.keycloak_user_id))
-                await EventBus.publish("UserDisabled", {"id": str(user.id)})
+                await nats.publish("UserDisabled", {"id": str(user.id)})
             self.db.commit()
         return user
 
@@ -73,7 +73,7 @@ class IdentityService:
         self.db.add(role)
         self.db.commit()
         self.db.refresh(role)
-        await EventBus.publish("RoleCreated", {"id": str(role.id), "name": role.name})
+        await nats.publish("RoleCreated", {"id": str(role.id), "name": role.name})
         return role
 
     async def assign_role(self, user_id: UUID, role_id: UUID):
@@ -82,7 +82,7 @@ class IdentityService:
         if user and role:
             user.roles.append(role)
             self.db.commit()
-            await EventBus.publish("RoleAssignedToUser",
+            await nats.publish("RoleAssignedToUser",
                                                    {"user_id": str(user_id), "role_id": str(role_id)})
 
     async def remove_role(self, user_id: UUID, role_id: UUID):
@@ -91,7 +91,7 @@ class IdentityService:
         if user and role in user.roles:
             user.roles.remove(role)
             self.db.commit()
-            await EventBus.publish("RoleRemovedFromUser",
+            await nats.publish("RoleRemovedFromUser",
                                                    {"user_id": str(user_id), "role_id": str(role_id)})
 
     # --- Service Accounts ---
@@ -100,7 +100,7 @@ class IdentityService:
         self.db.add(sa)
         self.db.commit()
         self.db.refresh(sa)
-        await EventBus.publish("ServiceAccountCreated", {"id": str(sa.id), "client_id": sa.client_id})
+        await nats.publish("ServiceAccountCreated", {"id": str(sa.id), "client_id": sa.client_id})
         return sa
 
     # --- API Keys ---
@@ -110,7 +110,7 @@ class IdentityService:
         key = ApiKey(organization_id=org_id, name=name, service_account_id=sa_id, hashed_key=hashed)
         self.db.add(key)
         self.db.commit()
-        await EventBus.publish("ApiKeyCreated", {"id": str(key.id), "name": key.name})
+        await nats.publish("ApiKeyCreated", {"id": str(key.id), "name": key.name})
         return key, raw_key
 
     async def revoke_api_key(self, key_id: UUID):
@@ -118,4 +118,4 @@ class IdentityService:
         if key:
             key.revoked_at = datetime.utcnow()
             self.db.commit()
-            await EventBus.publish("ApiKeyRevoked", {"id": str(key_id)})
+            await nats.publish("ApiKeyRevoked", {"id": str(key_id)})

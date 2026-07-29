@@ -1,16 +1,15 @@
 import os
 import uuid
+
+import nats
 import pytest
 from keycloak import KeycloakAdmin
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
-from apps.identity.infrastructure.base import Base
+from sqlalchemy import  text
 from apps.identity.identity_main import app
 from apps.identity.infrastructure.database import db_client
-from infrastructure.nats.nats_client import EventBus
 from apps.identity.config.identity_settings import identity_settings as settings
-import nats
+from apps.identity.infrastructure.identity_nats_client import identity_nats_client as nats_client
 
 DATA = {}
 
@@ -73,13 +72,13 @@ def db_session():
 
 @pytest.fixture
 async def client():
-    EventBus._publisher = None
-    EventBus._subscriber = None
+    nats_client._publisher = None
+    nats_client._subscriber = None
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         async with app.router.lifespan_context(app):
             yield ac
-    await EventBus.shutdown()
+    await nats_client.shutdown()
 
 
 @pytest.mark.anyio
@@ -300,7 +299,7 @@ async def test_api_keys_revoke(client):
 
 @pytest.mark.anyio
 async def test_event_bus_publish(client):
-    await EventBus.publish(
+    await nats_client.publish(
         event_type="UserInvited",
         payload={"id": "test-user-id", "email": "test@cortexops.io"},
     )

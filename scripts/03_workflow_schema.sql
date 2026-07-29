@@ -1,18 +1,4 @@
 -- ========================================================
--- ENTITY RELATIONSHIP DIAGRAM
--- ========================================================
--- [ workflow_blueprints ] (1)
---       │
---       └── (N) [ workflow_instances ] (1)
---                       │
---                       ├── (N) [ tasks ] (1)
---                       │           │
---                       │           └── (N) [ task_dependencies ] (Self-Referencing DAG)
---                       │
---                       └── (N) [ workflow_events ]
-
-
--- ========================================================
 -- DATABASE SETUP
 -- ========================================================
 CREATE DATABASE workflow;
@@ -45,6 +31,14 @@ CREATE TYPE workflow.task_status AS ENUM (
             'CANCELLED'
         );
 
+CREATE TYPE workflow.outbox_status AS ENUM (
+            'PENDING',
+            'PROCESSING',
+            'PROCESSED',
+            'FAILED',
+            'DEAD_LETTER'
+        );
+
 CREATE TABLE IF NOT EXISTS workflow.workflow_blueprints (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(255) NOT NULL,
@@ -61,6 +55,7 @@ CREATE TABLE IF NOT EXISTS workflow.workflow_instances (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     blueprint_id UUID NOT NULL REFERENCES workflow.workflow_blueprints(id) ON DELETE RESTRICT,
     status workflow.workflow_status NOT NULL DEFAULT 'PENDING',
+    version INT DEFAULT 1 NOT NULL,
     current_step VARCHAR(100),
     started_by UUID,
     temporal_workflow_id VARCHAR(255),
@@ -68,6 +63,7 @@ CREATE TABLE IF NOT EXISTS workflow.workflow_instances (
     input_data JSONB DEFAULT '{}'::jsonb,
     output_data JSONB DEFAULT '{}'::jsonb,
     error_details JSONB,
+    triggered_by VARCHAR(255),
     started_at TIMESTAMP WITH TIME ZONE,
     completed_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
@@ -78,6 +74,7 @@ CREATE TABLE IF NOT EXISTS workflow.tasks (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     workflow_instance_id UUID NOT NULL REFERENCES workflow.workflow_instances(id) ON DELETE CASCADE,
     task_definition_id VARCHAR(100) NOT NULL,
+    version INT NOT NULL DEFAULT 1,
     name VARCHAR(255) NOT NULL,
     action_type VARCHAR(100) NOT NULL,
     status workflow.task_status NOT NULL DEFAULT 'PENDING',
@@ -111,12 +108,37 @@ CREATE TABLE IF NOT EXISTS workflow.workflow_events (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS workflow.outbox_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_type VARCHAR(100) NOT NULL,
+    aggregate_type VARCHAR(50) NOT NULL,
+    aggregate_id UUID NOT NULL,
+    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+    status workflow.outbox_status NOT NULL DEFAULT 'PENDING',
+    retry_count INT NOT NULL DEFAULT 0,
+    error_message TEXT,
+    max_retries INT NOT NULL DEFAULT 5,
+    last_error TEXT DEFAULT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    processed_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE TABLE IF NOT EXISTS workflow.processed_events (
+    event_id VARCHAR(255) PRIMARY KEY,
+    consumer_group VARCHAR(100) NOT NULL,
+    processed_at TIMESTAMP WITH TIME ZONE DEFAULT  CURRENT_TIMESTAMP NOT NULL
+);
+
+
 CREATE INDEX IF NOT EXISTS idx_instances_blueprint ON workflow.workflow_instances(blueprint_id);
 CREATE INDEX IF NOT EXISTS idx_instances_status ON workflow.workflow_instances(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_instance ON workflow.tasks(workflow_instance_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON workflow.tasks(status);
 CREATE INDEX IF NOT EXISTS idx_events_instance ON workflow.workflow_events(workflow_instance_id);
-
+CREATE INDEX IF NOT EXISTS idx_outbox_status ON workflow.outbox_events(status);
+CREATE INDEX IF NOT EXISTS idx_outbox_event_type ON workflow.outbox_events(event_type);
+CREATE INDEX IF NOT EXISTS idx_outbox_aggregate ON workflow.outbox_events(aggregate_type, aggregate_id);
+CREATE INDEX IF NOT EXISTS idx_processed_events ON workflow.processed_events(consumer_group,processed_at);
 -- ========================================================
 -- SEED DATA
 -- ========================================================
@@ -130,12 +152,13 @@ VALUES
 ('Model Training', 'ML Pipeline for training classifiers', 2, '{"steps": ["data_fetch", "preprocess", "train", "eval"]}'::jsonb),
 ('Approval Chain', 'Standard multi-step approval workflow', 1, '{"steps": ["submit", "manager_review", "exec_review"]}'::jsonb);
 
-INSERT INTO workflow.workflow_instances (blueprint_id, status, current_step, started_by, input_data)
+INSERT INTO workflow.workflow_instances (blueprint_id, status, current_step, started_by, triggered_by, input_data)
 SELECT
     (SELECT id FROM workflow.workflow_blueprints ORDER BY random() LIMIT 1),
     (ARRAY['PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'WAITING_FOR_APPROVAL'])[floor(random() * 5 + 1)]::workflow.workflow_status,
     'step_' || floor(random() * 5 + 1),
     gen_random_uuid(),
+    (ARRAY['user:admin@cortex.ops', 'system:github-actions', 'api_key:service-account-ci', 'user:developer@cortex.ops'])[floor(random() * 4 + 1)],
     jsonb_build_object('request_id', 'REQ-' || i, 'priority', floor(random() * 3))
 FROM generate_series(1, 20) i;
 
@@ -167,5 +190,37 @@ SELECT
     jsonb_build_object('timestamp', NOW(), 'message', 'Event generated for task ' || name)
 FROM workflow.tasks
 WHERE random() > 0.5;
+
+INSERT INTO workflow.outbox_events (event_type, aggregate_type, aggregate_id, payload, status, processed_at)
+SELECT
+    'WorkflowStarted',
+    'WorkflowInstance',
+    id,
+    jsonb_build_object(
+        'instance_id', id,
+        'blueprint_id', blueprint_id,
+        'status', status
+    ),
+    (ARRAY['PENDING', 'PROCESSED'])[floor(random() * 2 + 1)]::workflow.outbox_status,
+    CASE WHEN random() > 0.5 THEN NOW() ELSE NULL END
+FROM workflow.workflow_instances
+WHERE random() > 0.4;
+
+-- Seed Outbox Events for Tasks
+INSERT INTO workflow.outbox_events (event_type, aggregate_type, aggregate_id, payload, status, processed_at)
+SELECT
+    'TaskCompleted',
+    'Task',
+    id,
+    jsonb_build_object(
+        'task_id', id,
+        'instance_id', workflow_instance_id,
+        'action_type', action_type,
+        'status', status
+    ),
+    (ARRAY['PENDING', 'PROCESSED', 'FAILED'])[floor(random() * 3 + 1)]::workflow.outbox_status,
+    CASE WHEN random() > 0.5 THEN NOW() ELSE NULL END
+FROM workflow.tasks
+WHERE status = 'COMPLETED';
 
 COMMIT;
