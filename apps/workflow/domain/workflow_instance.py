@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from uuid import uuid4
 from enum import Enum as PyEnum
-from sqlalchemy import Column, UUID, String, DateTime, Enum, ForeignKey
+from sqlalchemy import Column, UUID, String, DateTime, Enum, ForeignKey, INT
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 
@@ -26,6 +26,7 @@ class WorkflowInstance(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     blueprint_id = Column(UUID(as_uuid=True), ForeignKey("workflow.workflow_blueprints.id", ondelete="RESTRICT"), nullable=False)
     status = Column(Enum(WorkflowStatus, name="workflow_status", schema="workflow"), default=WorkflowStatus.PENDING, nullable=False)
+    version = Column(INT, default=1, nullable=False)
     current_step = Column(String(100), nullable=True)
     started_by = Column(UUID(as_uuid=True), nullable=True)
     temporal_workflow_id = Column(String(255), nullable=True)

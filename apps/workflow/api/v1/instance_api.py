@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List
 from uuid import UUID
 from fastapi import APIRouter, Depends, status, HTTPException
 from pydantic import BaseModel
@@ -9,6 +9,12 @@ from apps.workflow.infrastructure.database import workflow_db_session
 
 router = APIRouter(prefix="/instances", tags=["Workflow Instances"])
 
+class PaginatedInstanceResponse(BaseModel):
+    item : List[dict]
+    total : int
+    limit : int
+    offset : int
+    has_mode : bool
 
 class CreateInstanceSchema(BaseModel):
     blueprint_id: UUID
@@ -35,8 +41,7 @@ def create_instance(payload: CreateInstanceSchema, db: Session = Depends(workflo
         started_by=payload.started_by
     )
 
-
-@router.get("")
+@router.get("", response_model = PaginatedInstanceResponse)
 def list_instances(limit: int = 100, offset: int = 0, db: Session = Depends(workflow_db_session)):
     svc = InstanceService(db)
     return svc.get_instances(limit=limit, offset=offset)
