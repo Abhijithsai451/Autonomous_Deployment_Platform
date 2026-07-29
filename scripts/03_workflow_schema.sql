@@ -35,7 +35,8 @@ CREATE TYPE workflow.outbox_status AS ENUM (
             'PENDING',
             'PROCESSING',
             'PROCESSED',
-            'FAILED'
+            'FAILED',
+            'DEAD_LETTER'
         );
 
 CREATE TABLE IF NOT EXISTS workflow.workflow_blueprints (
@@ -54,6 +55,7 @@ CREATE TABLE IF NOT EXISTS workflow.workflow_instances (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     blueprint_id UUID NOT NULL REFERENCES workflow.workflow_blueprints(id) ON DELETE RESTRICT,
     status workflow.workflow_status NOT NULL DEFAULT 'PENDING',
+    version INT DEFAULT 1 NOT NULL,
     current_step VARCHAR(100),
     started_by UUID,
     temporal_workflow_id VARCHAR(255),
@@ -72,6 +74,7 @@ CREATE TABLE IF NOT EXISTS workflow.tasks (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     workflow_instance_id UUID NOT NULL REFERENCES workflow.workflow_instances(id) ON DELETE CASCADE,
     task_definition_id VARCHAR(100) NOT NULL,
+    version INT NOT NULL DEFAULT 1,
     name VARCHAR(255) NOT NULL,
     action_type VARCHAR(100) NOT NULL,
     status workflow.task_status NOT NULL DEFAULT 'PENDING',

@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from uuid import uuid4
 from enum import Enum as PyEnum
-from sqlalchemy import Column, UUID, String, DateTime, Enum, ForeignKey, Integer
+from sqlalchemy import Column, UUID, String, DateTime, Enum, ForeignKey, Integer, INT
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship, foreign
 
@@ -27,6 +27,7 @@ class Task(Base):
     workflow_instance_id = Column(UUID(as_uuid=True), ForeignKey("workflow.workflow_instances.id", ondelete="CASCADE"),
                                   nullable=False)
     task_definition_id = Column(String(100), nullable=False)
+    version = Column(INT, default=1, nullable=False)
     name = Column(String(255), nullable=False)
     action_type = Column(String(100), nullable=False)
     status = Column(Enum(TaskStatus, name="task_status", schema="workflow"), default=TaskStatus.PENDING, nullable=False)
