@@ -17,8 +17,7 @@ class OutboxService:
         payload: Dict[str, Any]
     ) -> OutboxEvent:
         """
-        Stages an outbox record in the active database session.
-        MUST be committed along with the domain model changes.
+        Stages an outbox record in the active database session. MUST be committed along with the domain model changes.
         """
         outbox_entry = OutboxEvent(
             event_type=event_type,

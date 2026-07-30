@@ -13,10 +13,8 @@ from apps.workflow.infrastructure.structured_logs import struct_logger as logger
 
 class TaskDependencyEngine:
     """
-    Evaluates and updates task dependency state graphs (DAGs)
-    within an active database transaction.
+    Evaluates and updates task dependency state graphs (DAGs) within an active database transaction.
     """
-
     def __init__(self, db: Session):
         self.db = db
 
@@ -92,7 +90,6 @@ class TaskDependencyEngine:
         )
         parent_statuses = self.db.scalars(stmt).all()
 
-        # If any parent is NOT completed, dependencies are not satisfied
         return all(status == TaskStatus.COMPLETED for status in parent_statuses)
 
     def _stage_unlocked_events(self, task: Task) -> None:

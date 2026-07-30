@@ -28,7 +28,6 @@ def create_blueprint(payload: CreateBlueprintSchema, db: Session = Depends(workf
         version=payload.version
     )
 
-
 @router.get("")
 def list_blueprints(limit: int = 100, offset: int = 0, db: Session = Depends(workflow_db_session)):
     svc = BlueprintService(db)
