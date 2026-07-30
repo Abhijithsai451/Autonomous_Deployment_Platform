@@ -16,7 +16,6 @@ class InstanceService:
         self.db = db
 
     def _log_event(self, instance_id: UUID, event_type: str, payload: dict) -> WorkflowEvent:
-        """Stages an audit event AND an outbox record in the current DB transaction."""
         event = WorkflowEvent(
             workflow_instance_id=instance_id,
             task_id=None,
@@ -25,22 +24,14 @@ class InstanceService:
         )
         self.db.add(event)
 
-        outbox_entry = OutboxEvent(
-            event_type=f"workflow.events.{event_type}",
-            aggregate_type="WorkflowInstance",
-            aggregate_id=instance_id,
-            payload={
-                "instance_id": str(instance_id),
-                **payload
-            },
+        outbox_entry = OutboxEvent(event_type=f"workflow.events.{event_type}",aggregate_type="WorkflowInstance",
+            aggregate_id=instance_id,payload={"instance_id": str(instance_id),**payload},
             status=OutboxStatus.PENDING
         )
         self.db.add(outbox_entry)
-
         return event
 
-    def create_instance(
-        self,blueprint_id: UUID,input_data: Optional[dict] = None,triggered_by: Optional[str] = "SYSTEM",
+    def create_instance(self,blueprint_id: UUID,input_data: Optional[dict] = None,triggered_by: Optional[str] = "SYSTEM",
             started_by: Optional[str] = None) -> WorkflowInstance:
         actor = started_by or triggered_by or "SYSTEM"
         instance = WorkflowInstance(
@@ -50,7 +41,7 @@ class InstanceService:
             triggered_by=triggered_by
         )
         self.db.add(instance)
-        self.db.flush()  # Generates instance.id without committing
+        self.db.flush()
 
         self._log_event(
             instance_id=instance.id,
@@ -215,11 +206,11 @@ class InstanceService:
         self.db.refresh(instance)
         return instance
 
-    def timeout_instance(self, instance_id: UUID, reason: str = "Timeout reached") -> WorkflowInstance:
+    """ def timeout_instance(self, instance_id: UUID, reason: str = "Timeout reached") -> WorkflowInstance:
         instance = self.get_instance_by_id(instance_id)
         instance.status = WorkflowStatus.FAILED
         instance.completed_at = datetime.now(timezone.utc)
         self._log_event(instance.id, "WorkflowTimedOut", {"reason": reason})
         self.db.commit()
         self.db.refresh(instance)
-        return instance
+        return instance"""

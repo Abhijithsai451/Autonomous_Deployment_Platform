@@ -14,9 +14,7 @@ class BlueprintService:
 
     def _log_event(self, blueprint_id: UUID, event_type: str, payload: dict) -> OutboxEvent:
 
-        outbox_entry = OutboxEvent(
-            event_type=f"workflow.events.{event_type}",
-            aggregate_type="WorkflowBlueprint",
+        outbox_entry = OutboxEvent(event_type=f"workflow.events.{event_type}",aggregate_type="WorkflowBlueprint",
             aggregate_id=blueprint_id,
             payload={
                 "blueprint_id": str(blueprint_id),
@@ -25,16 +23,10 @@ class BlueprintService:
             status=OutboxStatus.PENDING
         )
         self.db.add(outbox_entry)
-
         return outbox_entry
 
-    def create_blueprint(
-        self, 
-        name: str, 
-        definition: dict, 
-        description: Optional[str] = None,
-        version: int = 1
-    ) -> WorkflowBlueprint:
+    def create_blueprint(self, name: str, definition: dict, description: Optional[str] = None,
+        version: int = 1 ) -> WorkflowBlueprint:
         existing = (
             self.db.query(WorkflowBlueprint)
             .filter(WorkflowBlueprint.name == name, WorkflowBlueprint.version == version)
@@ -54,7 +46,7 @@ class BlueprintService:
             is_active=True
         )
         self.db.add(blueprint)
-        self.db.flush()  # Generates blueprint.id within session without committing
+        self.db.flush()
 
         # Stage Outbox + Audit records atomically
         self._log_event(

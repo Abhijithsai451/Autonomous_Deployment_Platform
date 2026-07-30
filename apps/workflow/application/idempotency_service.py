@@ -36,10 +36,9 @@ class IdempotencyService:
 def idempotent_listener(consumer_group: str):
     """
     Decorator/Wrapper for NATS handlers to enforce idempotency.
-    Extracts 'id' from payload or metadata, checks 'processed_events',
-    and short-circuits execution if already processed.
     """
     def decorator(handler: Callable[[Dict[str, Any], Dict[str, Any]], Awaitable[None]]):
+
         @functools.wraps(handler)
         async def wrapper(payload: Dict[str, Any], metadata: Dict[str, Any]) -> None:
             # Extract Event ID (check payload first, fallback to metadata)
@@ -60,11 +59,8 @@ def idempotent_listener(consumer_group: str):
                         extra={"event_id": event_id, "consumer_group": consumer_group}
                     )
                     return
-
-                # Execute original NATS event handler
                 await handler(payload, metadata)
 
-                # Record successful processing inside DB transaction
                 idempotency_svc.mark_processed(event_id, consumer_group)
                 db.commit()
 
@@ -80,5 +76,3 @@ def idempotent_listener(consumer_group: str):
 
         return wrapper
     return decorator
-
-
