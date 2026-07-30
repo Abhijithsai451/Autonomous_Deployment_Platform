@@ -101,7 +101,10 @@ def test_create_instance(client):
 def test_list_instances(client):
     response = client.get("/instances")
     assert response.status_code == 200
-    assert isinstance(response.json(), list)
+    data = response.json()
+    assert isinstance(data, dict)
+    assert "items" in data
+    assert isinstance(data["items"], list)
 
 
 def test_get_instance(client):
