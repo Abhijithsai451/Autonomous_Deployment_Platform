@@ -1,7 +1,9 @@
 import asyncio
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from sqlalchemy.orm.exc import StaleDataError
 
 from apps.workflow.api.v1 import blueprint_api, instance_api, task_api, timeline_api
 from apps.workflow.application.idempotency_service import idempotent_listener
@@ -37,6 +39,21 @@ async def workflow_lifespan(app: FastAPI):
     logger.info("NATS Messaging Core successfully disconnected.")
 
 app = FastAPI(title="CortexOps Workflow Service", lifespan= workflow_lifespan)
+
+@app.exception_handler(StaleDataError)
+async def stale_data_exception_handler(request: Request, exc: StaleDataError):
+    """
+    Catches concurrent Mutation race conditions (SQL Alchemy Conflicts)
+    Turns DB Errors into a clean HTTP 409 Conflict response.
+    """
+    logger.warning(f"Optimistic lock conflict detected: {exc}")
+    return JSONResponse(
+        status_code = 409,
+        content = {
+            "error" : "RESOURCE_CONFLICT",
+            "message": "The resource was updated by another request. Please retry your operation."
+        }
+    )
 
 @app.api_route("/health",methods=["GET", "HEAD"], tags=["System"])
 async def health_check():
