@@ -1,12 +1,12 @@
 import uuid
 import pytest
-from fastapi.testclient import TestClient
+import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 import warnings
 
 from apps.workflow.application.idempotency_service import IdempotencyService
 from apps.workflow.infrastructure.database import workflow_db_client as db_client
-from apps.workflow.infrastructure.workflow_nats_client import workflow_nats_client as nats
 from apps.workflow.workflow_main import app
 
 DATA = {}
@@ -37,20 +37,19 @@ def db_session():
     connection.close()
 
 
-@pytest.fixture
-def client():
-    """Synchronous HTTP Client that communicates directly with the FastAPI app."""
-    nats._publisher = None
-    nats._subscriber = None
-    with TestClient(app) as sync_client:
-        yield sync_client
+@pytest_asyncio.fixture
+async def client():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        async with app.router.lifespan_context(app):
+            yield ac
 
 
 # ========================================================
 # BLUEPRINT API TESTS
 # ========================================================
-
-def test_create_blueprint(client):
+@pytest.mark.anyio
+async def test_create_blueprint(client):
     payload = {
         "name": f"Test Blueprint {uuid.uuid4().hex[:4]}",
         "description": "Integration test workflow definition",
@@ -62,160 +61,160 @@ def test_create_blueprint(client):
             ]
         }
     }
-    response = client.post("/blueprints", json=payload)
+    response = await client.post("/blueprints", json=payload)
     assert response.status_code in [200, 201]
 
-
-def test_list_blueprints(client):
-    response = client.get("/blueprints")
+@pytest.mark.anyio
+async def test_list_blueprints(client):
+    response = await client.get("/blueprints")
     assert response.status_code == 200
     assert isinstance(response.json(), list)
 
-
-def test_get_blueprint(client):
+@pytest.mark.anyio
+async def test_get_blueprint(client):
     target_id = DATA.get("blueprint_id", str(uuid.uuid4()))
-    response = client.get(f"/blueprints/{target_id}")
+    response = await client.get(f"/blueprints/{target_id}")
     assert response.status_code in [200, 404]
 
-
-def test_patch_blueprint(client):
+@pytest.mark.anyio
+async def test_patch_blueprint(client):
     target_id = DATA.get("blueprint_id", str(uuid.uuid4()))
     payload = {"description": "Updated Blueprint Description"}
-    response = client.patch(f"/blueprints/{target_id}", json=payload)
+    response = await client.patch(f"/blueprints/{target_id}", json=payload)
     assert response.status_code in [200, 404]
 
 
 # ========================================================
 # WORKFLOW INSTANCE API TESTS
 # ========================================================
-
-def test_create_instance(client):
+@pytest.mark.anyio
+async def test_create_instance(client):
     payload = {
         "blueprint_id": DATA.get("blueprint_id", str(uuid.uuid4())),
         "input_data": {"environment": "staging"}
     }
-    response = client.post("/instances", json=payload)
+    response = await  client.post("/instances", json=payload)
     assert response.status_code in [200, 201, 404]
 
-
-def test_list_instances(client):
-    response = client.get("/instances")
+@pytest.mark.anyio
+async def test_list_instances(client):
+    response = await client.get("/instances")
     assert response.status_code == 200
     data = response.json()
     assert isinstance(data, dict)
     assert "items" in data
     assert isinstance(data["items"], list)
 
-
-def test_get_instance(client):
+@pytest.mark.anyio
+async def test_get_instance(client):
     target_id = DATA.get("instance_id", str(uuid.uuid4()))
-    response = client.get(f"/instances/{target_id}")
+    response = await client.get(f"/instances/{target_id}")
     assert response.status_code in [200, 404]
 
-
-def test_pause_instance(client):
+@pytest.mark.anyio
+async def test_pause_instance(client):
     target_id = DATA.get("instance_id", str(uuid.uuid4()))
-    response = client.post(f"/instances/{target_id}/pause")
+    response = await  client.post(f"/instances/{target_id}/pause")
     assert response.status_code in [200, 400, 404]
 
-
-def test_resume_instance(client):
+@pytest.mark.anyio
+async def test_resume_instance(client):
     target_id = DATA.get("instance_id", str(uuid.uuid4()))
-    response = client.post(f"/instances/{target_id}/resume")
+    response = await client.post(f"/instances/{target_id}/resume")
     assert response.status_code in [200, 400, 404]
 
-
-def test_cancel_instance(client):
+@pytest.mark.anyio
+async def test_cancel_instance(client):
     target_id = DATA.get("instance_id", str(uuid.uuid4()))
     payload = {"reason": "Cancelled by integration test"}
-    response = client.post(f"/instances/{target_id}/cancel", json=payload)
+    response =await client.post(f"/instances/{target_id}/cancel", json=payload)
     assert response.status_code in [200, 404]
 
-
-def test_retry_instance(client):
+@pytest.mark.anyio
+async def test_retry_instance(client):
     target_id = DATA.get("instance_id", str(uuid.uuid4()))
-    response = client.post(f"/instances/{target_id}/retry")
+    response = await client.post(f"/instances/{target_id}/retry")
     assert response.status_code in [200, 400, 404, 422]
 
-
-def test_signal_instance(client):
+@pytest.mark.anyio
+async def test_signal_instance(client):
     target_id = DATA.get("instance_id", str(uuid.uuid4()))
     payload = {
         "signal_name": "APPROVAL_GRANTED",
         "payload": {"approved_by": str(uuid.uuid4())}
     }
-    response = client.post(f"/instances/{target_id}/signal", json=payload)
+    response = await client.post(f"/instances/{target_id}/signal", json=payload)
     assert response.status_code in [200, 404]
 
 
 # ========================================================
 # TASK API TESTS
 # ========================================================
-
-def test_get_task(client):
+@pytest.mark.anyio
+async def test_get_task(client):
     target_id = DATA.get("task_id", str(uuid.uuid4()))
-    response = client.get(f"/tasks/{target_id}")
+    response = await client.get(f"/tasks/{target_id}")
     assert response.status_code in [200, 404]
 
-
-def test_get_instance_tasks(client):
+@pytest.mark.anyio
+async def test_get_instance_tasks(client):
     target_id = DATA.get("instance_id", str(uuid.uuid4()))
-    response = client.get(f"/instances/{target_id}/tasks")
+    response = await client.get(f"/instances/{target_id}/tasks")
     assert response.status_code in [200, 404]
 
-
-def test_retry_task(client):
+@pytest.mark.anyio
+async def test_retry_task(client):
     target_id = DATA.get("task_id", str(uuid.uuid4()))
-    response = client.post(f"/tasks/{target_id}/retry", json={"reason": "Manual retry"})
+    response = await client.post(f"/tasks/{target_id}/retry", json={"reason": "Manual retry"})
     assert response.status_code in [200, 400, 404, 422]
 
-
-def test_cancel_task(client):
+@pytest.mark.anyio
+async def test_cancel_task(client):
     target_id = DATA.get("task_id", str(uuid.uuid4()))
-    response = client.post(f"/tasks/{target_id}/cancel")
+    response = await client.post(f"/tasks/{target_id}/cancel")
     assert response.status_code in [200, 404, 422]
 
 
 # ========================================================
 # TIMELINE & EVENT API TESTS
 # ========================================================
-
-def test_get_instance_timeline(client):
+@pytest.mark.anyio
+async def test_get_instance_timeline(client):
     target_id = DATA.get("instance_id", str(uuid.uuid4()))
-    response = client.get(f"/instances/{target_id}/timeline")
+    response = await client.get(f"/instances/{target_id}/timeline")
     assert response.status_code in [200, 404]
 
-
-def test_complete_instance_publishes_event(client):
+@pytest.mark.anyio
+async def test_complete_instance_publishes_event(client):
     target_id = DATA.get("instance_id", str(uuid.uuid4()))
-    response = client.post(f"/instances/{target_id}/complete", json={"result": "success"})
+    response = await client.post(f"/instances/{target_id}/complete", json={"result": "success"})
     assert response.status_code in [200, 404]
 
-
-def test_timeout_instance_publishes_event(client):
+@pytest.mark.anyio
+async def test_timeout_instance_publishes_event(client):
     target_id = DATA.get("instance_id", str(uuid.uuid4()))
-    response = client.post(f"/instances/{target_id}/timeout", json={"reason": "SLA breached"})
+    response = await client.post(f"/instances/{target_id}/timeout", json={"reason": "SLA breached"})
     assert response.status_code in [200, 404]
 
-
-def test_complete_task_publishes_event(client):
+@pytest.mark.anyio
+async def test_complete_task_publishes_event(client):
     target_id = DATA.get("task_id", str(uuid.uuid4()))
-    response = client.post(f"/tasks/{target_id}/complete", json={"output": "ok"})
+    response = await client.post(f"/tasks/{target_id}/complete", json={"output": "ok"})
     assert response.status_code in [200, 404]
 
-
-def test_request_and_receive_approval_events(client):
+@pytest.mark.anyio
+async def test_request_and_receive_approval_events(client):
     target_id = DATA.get("task_id", str(uuid.uuid4()))
 
     # 1. Request Approval
-    req_res = client.post(
+    req_res = await client.post(
         f"/tasks/{target_id}/request-approval",
         json={"required_approvers": ["admin@cortex.ops"], "details": {"gate": "production"}}
     )
     assert req_res.status_code in [200, 404, 422]
 
     # 2. Receive Approval
-    rec_res = client.post(
+    rec_res = await client.post(
         f"/tasks/{target_id}/receive-approval",
         json={"approved_by": "admin@cortex.ops", "approval_metadata": {"note": "Approved"}}
     )
@@ -223,8 +222,8 @@ def test_request_and_receive_approval_events(client):
 # ----------------------------------------------------------------
 # INTEGRATION TESTS
 # ----------------------------------------------------------------
-
-def test_happy_path_workflow(client, db_session):
+@pytest.mark.anyio
+async def test_happy_path_workflow(client, db_session):
     """
     Tests the complete end-to-end lifecycle of a workflow:
     1. Create a Blueprint with sequential tasks and an approval gate
@@ -247,7 +246,7 @@ def test_happy_path_workflow(client, db_session):
             ]
         }
     }
-    bp_res = client.post("/blueprints", json=bp_payload)
+    bp_res = await  client.post("/blueprints", json=bp_payload)
     assert bp_res.status_code in [200, 201], f"Failed to create blueprint: {bp_res.text}"
     blueprint_id = bp_res.json()["id"]
 
@@ -256,23 +255,23 @@ def test_happy_path_workflow(client, db_session):
         "blueprint_id": blueprint_id,
         "input_data": {"environment": "production", "commit_sha": "a1b2c3d"}
     }
-    inst_res = client.post("/instances", json=inst_payload)
+    inst_res = await client.post("/instances", json=inst_payload)
     assert inst_res.status_code in [200, 201], f"Failed to spawn instance: {inst_res.text}"
     instance_id = inst_res.json()["id"]
 
     # Step 3: Fetch Tasks
-    tasks_res = client.get(f"/instances/{instance_id}/tasks")
+    tasks_res = await client.get(f"/instances/{instance_id}/tasks")
     assert tasks_res.status_code == 200
     tasks = tasks_res.json()
 
     # If tasks aren't auto-spawned on POST /instances, verify instance endpoint works
     if len(tasks) > 0:
         task_1_id = tasks[0]["id"]
-        complete_res = client.post(f"/tasks/{task_1_id}/complete", json={"output": {"ok": True}})
+        complete_res = await client.post(f"/tasks/{task_1_id}/complete", json={"output": {"ok": True}})
         assert complete_res.status_code in [200, 404]
 
     # Step 4: Complete Instance & Verify Staged Outbox Events
-    comp_inst_res = client.post(f"/instances/{instance_id}/complete", json={"result": "Pipeline deployed"})
+    comp_inst_res = await client.post(f"/instances/{instance_id}/complete", json={"result": "Pipeline deployed"})
     assert comp_inst_res.status_code in [200, 404]
 
     outbox_entries = db_session.execute(
@@ -282,20 +281,20 @@ def test_happy_path_workflow(client, db_session):
     assert len(outbox_entries) >= 0
 
 
-# 2. CANCEL & PAUSE/RESUME INTEGRATION TEST
-def test_instance_pause_resume_cancel_flow(client, db_session):
+@pytest.mark.anyio
+async def test_instance_pause_resume_cancel_flow(client, db_session):
     # 1. Create Blueprint & Instance
-    bp_res = client.post("/blueprints", json={
+    bp_res =await  client.post("/blueprints", json={
         "name": f"Pause-Cancel Flow {uuid.uuid4().hex[:4]}",
         "definition": {"steps": [{"id": "s1", "name": "Step 1"}]}
     })
     bp_id = bp_res.json()["id"]
 
-    inst_res = client.post("/instances", json={"blueprint_id": bp_id})
+    inst_res = await client.post("/instances", json={"blueprint_id": bp_id})
     inst_id = inst_res.json()["id"]
 
     # 2. Pause Instance
-    pause_res = client.post(f"/instances/{inst_id}/pause")
+    pause_res = await client.post(f"/instances/{inst_id}/pause")
     assert pause_res.status_code == 200
 
     db_status = db_session.execute(
@@ -305,7 +304,7 @@ def test_instance_pause_resume_cancel_flow(client, db_session):
     assert db_status == "PAUSED"
 
     # 3. Resume Instance
-    resume_res = client.post(f"/instances/{inst_id}/resume")
+    resume_res = await client.post(f"/instances/{inst_id}/resume")
     assert resume_res.status_code == 200
 
     db_status = db_session.execute(
@@ -315,7 +314,7 @@ def test_instance_pause_resume_cancel_flow(client, db_session):
     assert db_status in ["PENDING", "RUNNING"]
 
     # 4. Cancel Instance
-    cancel_res = client.post(f"/instances/{inst_id}/cancel", json={"reason": "Test cancellation"})
+    cancel_res = await client.post(f"/instances/{inst_id}/cancel", json={"reason": "Test cancellation"})
     assert cancel_res.status_code == 200
 
     db_status = db_session.execute(
@@ -324,10 +323,9 @@ def test_instance_pause_resume_cancel_flow(client, db_session):
     ).fetchone()[0]
     assert db_status == "CANCELLED"
 
-
-# 3. TASK FAILURE & RETRY LIFECYCLE TEST
-def test_task_failure_and_retry_flow(client, db_session):
-    bp_res = client.post("/blueprints", json={
+@pytest.mark.anyio
+async def test_task_failure_and_retry_flow(client, db_session):
+    bp_res = await  client.post("/blueprints", json={
         "name": f"Retry Pipeline {uuid.uuid4().hex[:4]}",
         "description": "Retry integration test",
         "version": 1,
@@ -336,36 +334,38 @@ def test_task_failure_and_retry_flow(client, db_session):
         }
     })
     assert bp_res.status_code in [200, 201]
-    inst_res = client.post("/instances", json={"blueprint_id": bp_res.json()["id"]})
+    inst_res = await client.post("/instances", json={"blueprint_id": bp_res.json()["id"]})
     assert inst_res.status_code in [200, 201]
     inst_id = inst_res.json()["id"]
 
-    tasks_res = client.get(f"/instances/{inst_id}/tasks")
+    tasks_res = await client.get(f"/instances/{inst_id}/tasks")
     assert tasks_res.status_code == 200
     tasks = tasks_res.json()
 
     if len(tasks) > 0:
         task_id = tasks[0]["id"]
-        retry_res = client.post(f"/tasks/{task_id}/retry", json={"reason": "Flaky connection error"})
+        retry_res = await client.post(f"/tasks/{task_id}/retry", json={"reason": "Flaky connection error"})
         assert retry_res.status_code in [200, 202, 400, 422]
 
-# 4. INVALID STATE TRANSITIONS TEST
-def test_invalid_state_transition_protection(client):
-    bp_res = client.post("/blueprints", json={
+@pytest.mark.anyio
+async def test_invalid_state_transition_protection(client):
+    bp_res = await  client.post("/blueprints", json={
         "name": f"Terminal State Test {uuid.uuid4().hex[:4]}",
         "description": "Terminal state test",
         "version": 1,
         "definition": {"tasks": []}
     })
-    inst_res = client.post("/instances", json={"blueprint_id": bp_res.json()["id"]})
+    inst_res = await client.post("/instances", json={"blueprint_id": bp_res.json()["id"]})
     inst_id = inst_res.json()["id"]
 
     # Transition instance to COMPLETED (terminal)
-    client.post(f"/instances/{inst_id}/complete", json={"result": "done"})
+    await client.post(f"/instances/{inst_id}/complete", json={"result": "done"})
 
     # Attempt invalid pause
-    invalid_pause = client.post(f"/instances/{inst_id}/pause")
+    invalid_pause = await  client.post(f"/instances/{inst_id}/pause")
     assert invalid_pause.status_code in [200, 400, 422]
+
+@pytest.mark.anyio
 def test_outbox_concurrency_skip_locked(db_session):
     event_1_id = uuid.uuid4()
     event_2_id = uuid.uuid4()
@@ -386,33 +386,35 @@ def test_outbox_concurrency_skip_locked(db_session):
 
     assert len(selected_events) >= 2
 
-def test_workflow_sla_timeout_event(client, db_session):
-    bp_res = client.post("/blueprints", json={
+@pytest.mark.anyio
+async def test_workflow_sla_timeout_event(client, db_session):
+    bp_res = await client.post("/blueprints", json={
         "name": f"SLA Timeout Test {uuid.uuid4().hex[:4]}",
         "version": 1,
         "definition": {"tasks": []}
     })
-    inst_res = client.post("/instances", json={"blueprint_id": bp_res.json()["id"]})
+    inst_res = await client.post("/instances", json={"blueprint_id": bp_res.json()["id"]})
     inst_id = inst_res.json()["id"]
 
-    timeout_res = client.post(f"/instances/{inst_id}/timeout", json={"reason": "SLA threshold exceeded"})
+    timeout_res = await client.post(f"/instances/{inst_id}/timeout", json={"reason": "SLA threshold exceeded"})
     assert timeout_res.status_code in [200, 404]
 
-def test_workflow_signal_ingestion(client, db_session):
-    bp_res = client.post("/blueprints", json={
+@pytest.mark.anyio
+async def test_workflow_signal_ingestion(client, db_session):
+    bp_res = await client.post("/blueprints", json={
         "name": f"Signal Test {uuid.uuid4().hex[:4]}",
         "description": "Signal test",
         "version": 1,
         "definition": {"tasks": []}
     })
-    inst_res = client.post("/instances", json={"blueprint_id": bp_res.json()["id"]})
+    inst_res = await client.post("/instances", json={"blueprint_id": bp_res.json()["id"]})
     inst_id = inst_res.json()["id"]
 
     signal_payload = {
         "signal_name": "PAYMENT_RECEIVED",
         "payload": {"transaction_id": "tx_998877", "amount": 150.00}
     }
-    sig_res = client.post(f"/instances/{inst_id}/signal", json=signal_payload)
+    sig_res = await client.post(f"/instances/{inst_id}/signal", json=signal_payload)
     assert sig_res.status_code in [200, 404]
 
 
@@ -422,7 +424,6 @@ def test_idempotency_and_dlq_routing(db_session):
     1. IdempotencyService prevents duplicate event insertions.
     2. Outbox events breaching max_retries transition to DEAD_LETTER status.
     """
-
 
     # 1. Test Idempotency Guard
     idempotency_svc = IdempotencyService(db_session)

@@ -1,6 +1,4 @@
-import os
 import uuid
-
 import nats
 import pytest
 from keycloak import KeycloakAdmin
@@ -72,13 +70,10 @@ def db_session():
 
 @pytest.fixture
 async def client():
-    nats_client._publisher = None
-    nats_client._subscriber = None
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         async with app.router.lifespan_context(app):
             yield ac
-    await nats_client.shutdown()
 
 
 @pytest.mark.anyio

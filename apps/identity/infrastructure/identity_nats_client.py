@@ -1,8 +1,9 @@
 from typing import Callable, Awaitable, Dict, Any
 
 from apps.identity.infrastructure.structured_logs import struct_logger as logger
-from infrastructure.nats.nats_client import EventBus
+from infrastructure.nats.event_bus import EventBus
 
+"""
 IDENTITY_STREAM = "identity_events"
 IDENTITY_SUBJECT_PREFIX = "identity.events"
 
@@ -41,6 +42,6 @@ class IdentityNatsEngine:
 
     async def shutdown(self) -> None:
         await EventBus.shutdown()
+"""
 
-
-identity_nats_client = IdentityNatsEngine()
+identity_nats_client = EventBus(service= "identity")

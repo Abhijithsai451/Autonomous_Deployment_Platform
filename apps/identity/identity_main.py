@@ -1,3 +1,5 @@
+import os
+
 from apps.identity.infrastructure.identity_nats_client import identity_nats_client as nats
 from apps.identity.infrastructure.structured_logs import struct_logger as logger
 from packages.logging.structured_logs import StructuredLogger
@@ -18,10 +20,11 @@ async def identity_logging_handler(payload: dict, metadata: dict):
 async def identity_lifespan(app: FastAPI):
     await nats.initialize()
     logger.info("NATS Messaging Core successfully initialized.")
-
+    TESTING = os.getenv("TESTING", "false").lower() == "true"
+    durable_suffix = "-test" if TESTING else ""
     await nats.register_listener(
          subject="UserCreated",
-         durable_name="identity-user-created-worker",
+         durable_name=f"identity-user-created-worker{durable_suffix}",
          handler=identity_logging_handler
      )
 
