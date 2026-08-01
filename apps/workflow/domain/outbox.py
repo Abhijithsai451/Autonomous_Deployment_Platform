@@ -7,8 +7,6 @@ from sqlalchemy.dialects.postgresql import UUID, JSONB
 
 from apps.workflow.infrastructure.base import Base
 
-
-
 class OutboxStatus(str, enum.Enum):
     PENDING = "PENDING"
     PROCESSING = "PROCESSING"
@@ -22,7 +20,7 @@ class OutboxEvent(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     event_type = Column(String(100), nullable=False, index=True)
-    aggregate_type = Column(String(50), nullable=False)  # e.g., "WorkflowInstance" or "Task"
+    aggregate_type = Column(String(50), nullable=False)
     aggregate_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     payload = Column(JSONB, nullable=False)
     status = Column(

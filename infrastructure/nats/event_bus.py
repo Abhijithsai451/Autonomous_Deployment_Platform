@@ -4,6 +4,8 @@ from infrastructure.nats.nats_client import NatsClient
 from infrastructure.nats.publisher import Publisher
 from infrastructure.nats.subscriber import Subscriber
 from packages.config.settings import common_settings
+from packages.events.base import BaseEvent
+from packages.events.event_envelope import EventEnvelope
 from packages.logging.structured_logs import struc_logger as logger
 
 class EventBus:
@@ -32,6 +34,16 @@ class EventBus:
             subject=subject,
             payload=payload,
             event_type = event_type
+        )
+
+    async def publish_event(self, event: BaseEvent)-> None:
+        """Publishes a typed BaseEvent wrapped automatically in an EventEnvelope"""
+        envelope = EventEnvelope.wrap(event = event, source_service = self.domain)
+        await self.publisher.publish(
+            subject = event.subject,
+            payload = envelope.model_dump(model="json"),
+            event_type = event.event_name,
+            idempotency_key = str(event.event_id)
         )
 
     async def register_listener(self,
