@@ -18,7 +18,7 @@ class StructuredLogger:
         self._log_level = getattr(logging, self.level, logging.INFO)
         self._bootstrap_system_logging()
         self._configure_structlog_pipeline()
-
+        self._logger = self.get_logger()
     def _bootstrap_system_logging(self) -> None:
         """
         Forwards standard Library log statements cleanly into stdout streams
@@ -57,3 +57,21 @@ class StructuredLogger:
             **runtime_context
         }
         return structlog.get_logger().bind(**bound_meta)
+
+    def info(self, event: str, **kwargs: Any) -> None:
+        self._logger.info(event, **kwargs)
+
+    def debug(self, event: str, **kwargs: Any) -> None:
+        self._logger.debug(event, **kwargs)
+
+    def error(self, event: str, **kwargs: Any) -> None:
+        self._logger.error(event, **kwargs)
+
+    def warning(self, event: str, **kwargs: Any) -> None:
+        self._logger.warning(event, **kwargs)
+
+struc_logger = StructuredLogger(
+    service_name="cortexops-infra",
+    level= "INFO",
+    initial_context = {"env": "production"}
+)

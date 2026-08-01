@@ -94,3 +94,5 @@ echo "========================================="
 echo "🎉 All systems are online and verified!"
 echo "========================================="
 echo "💡 To view logs, run: docker compose -f $APPS_COMPOSE logs -f"
+
+

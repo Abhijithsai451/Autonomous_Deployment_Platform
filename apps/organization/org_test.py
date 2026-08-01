@@ -6,7 +6,6 @@ from sqlalchemy import text
 
 from apps.organization.infrastructure.database import org_db_client as db_client
 from apps.organization.org_main import app
-from infrastructure.nats.nats_client import EventBus
 
 DATA = {}
 @pytest.fixture(scope="function", autouse=True)
@@ -32,8 +31,6 @@ def db_session():
 
 @pytest.fixture
 async def client():
-    EventBus._publisher = None
-    EventBus._subscriber = None
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         async with app.router.lifespan_context(app):
