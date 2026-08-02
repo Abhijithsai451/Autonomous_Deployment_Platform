@@ -4,11 +4,17 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
 
+from packages.events.event_registry import EventRegistry
+
 
 class BaseEvent(BaseModel):
     event_id: UUID = Field(default_factory=uuid4)
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     version: int = 1
+    def __init__subclass__(self, cls, **kwargs):
+        super().__init__subclass__(*kwargs)
+        if cls.__name__ != "BaseEvent":
+            EventRegistry.register(cls)
 
     @property
     def event_name(self) -> str:
