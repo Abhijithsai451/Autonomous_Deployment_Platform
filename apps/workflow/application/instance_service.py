@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from apps.workflow.domain.outbox import OutboxEvent, OutboxStatus
 from apps.workflow.domain.tasks import Task, TaskStatus
-from apps.workflow.domain.workflow_events import WorkflowEvent
+from apps.workflow.domain.workflow_event import WorkflowEvent
 from apps.workflow.domain.workflow_instance import WorkflowInstance, WorkflowStatus
 
 

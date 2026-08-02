@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from apps.workflow.domain.outbox import OutboxEvent
 from apps.workflow.domain.task_dependencies import TaskDependency
 from apps.workflow.domain.tasks import TaskStatus, Task
-from apps.workflow.domain.workflow_events import WorkflowEvent
+from apps.workflow.domain.workflow_event import WorkflowEvent
 from apps.workflow.infrastructure.structured_logs import struct_logger as logger
 
 

@@ -1,4 +1,6 @@
 import uuid
+from unittest.mock import AsyncMock
+from uuid import uuid4
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
@@ -6,7 +8,10 @@ from sqlalchemy import text
 import warnings
 
 from apps.workflow.application.idempotency_service import IdempotencyService
-from apps.workflow.infrastructure.database import workflow_db_client as db_client
+from apps.workflow.domain.events.workflow import WorkflowStartedEvent
+from apps.workflow.domain.outbox import OutboxStatus, OutboxEvent
+from apps.workflow.infrastructure.outbox_publisher import workflow_outbox_publisher
+from apps.workflow.infrastructure.database import workflow_db_client as db_client, workflow_db_session
 from apps.workflow.workflow_main import app
 
 DATA = {}
@@ -436,7 +441,6 @@ def test_idempotency_and_dlq_routing(db_session):
     idempotency_svc.mark_processed(test_event_id, consumer_group)
     db_session.commit()
 
-    # Second check must confirm it is processed
     assert idempotency_svc.is_already_processed(test_event_id, consumer_group)
 
     # 2. Test DLQ Routing Threshold
@@ -451,10 +455,43 @@ def test_idempotency_and_dlq_routing(db_session):
     )
     db_session.commit()
 
-    # Verify event is staged and ready for DLQ
     staged = db_session.execute(
         text("SELECT status, retry_count, max_retries FROM workflow.outbox_events WHERE id = :id"),
         {"id": dlq_event_id}
     ).fetchone()
 
     assert staged[1] >= staged[2], "Event retry_count should match or exceed max_retries for DLQ escalation"
+
+@pytest.mark.asyncio
+async def test_outbox_publisher_end_to_end(monkeypatch):
+    mock_publish = AsyncMock(return_value=None)
+    monkeypatch.setattr(workflow_outbox_publisher.bus, "publish", mock_publish)
+    # 2. Create a typed event & insert it into outbox DB as PENDING
+    event = WorkflowStartedEvent(
+        instance_id=uuid4(),
+        blueprint_id=uuid4(),
+        triggered_by="TEST_USER"
+    )
+
+    db = next(workflow_db_session())
+    outbox_entry = OutboxEvent(
+        id=str(event.event_id),
+        aggregate_type="WORKFLOW_INSTANCE",
+        aggregate_id=event.instance_id,
+        event_type=event.event_name,
+        payload=event.to_payload(),
+        status=OutboxStatus.PENDING
+    )
+    db.add(outbox_entry)
+    db.commit()
+
+    processed_count = await workflow_outbox_publisher.process_events()
+
+    assert processed_count == 1
+    mock_publish.assert_called_once_with(
+        event_type="WorkflowStartedEvent",
+        payload=event.to_payload()
+    )
+
+    db.refresh(outbox_entry)
+    assert outbox_entry.status == OutboxStatus.PROCESSED

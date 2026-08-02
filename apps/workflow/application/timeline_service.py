@@ -1,7 +1,7 @@
 from typing import List
 from uuid import UUID
 from sqlalchemy.orm import Session
-from apps.workflow.domain.workflow_events import WorkflowEvent
+from apps.workflow.domain.workflow_event import WorkflowEvent
 
 class TimelineService:
     def __init__(self, db:Session):

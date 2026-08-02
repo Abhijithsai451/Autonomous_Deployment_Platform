@@ -38,7 +38,7 @@ class EventBus:
 
     async def publish_event(self, event: BaseEvent)-> None:
         """Publishes a typed BaseEvent wrapped automatically in an EventEnvelope"""
-        envelope = EventEnvelope.wrap(event = event, source_service = self.domain)
+        envelope = EventEnvelope.wrap(event = event, source_service = self.service)
         await self.publisher.publish(
             subject = event.subject,
             payload = envelope.model_dump(model="json"),

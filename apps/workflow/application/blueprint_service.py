@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from apps.workflow.domain.outbox import OutboxEvent, OutboxStatus
 from apps.workflow.domain.workflow_blueprints import WorkflowBlueprint
-from apps.workflow.domain.workflow_events import WorkflowEvent
+from apps.workflow.domain.workflow_event import WorkflowEvent
 
 class BlueprintService:
     def __init__(self, db: Session):
