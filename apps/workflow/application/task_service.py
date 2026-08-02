@@ -9,7 +9,7 @@ from apps.workflow.application.dependency_service import TaskDependencyEngine
 from apps.workflow.domain.exceptions import InvalidStateTransitionError
 from apps.workflow.domain.outbox import OutboxEvent, OutboxStatus
 from apps.workflow.domain.tasks import Task, TaskStatus
-from apps.workflow.domain.workflow_events import WorkflowEvent
+from apps.workflow.domain.workflow_event import WorkflowEvent
 
 
 class TaskService:

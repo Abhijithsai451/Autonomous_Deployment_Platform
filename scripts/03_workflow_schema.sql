@@ -112,7 +112,7 @@ CREATE TABLE IF NOT EXISTS workflow.outbox_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     event_type VARCHAR(100) NOT NULL,
     aggregate_type VARCHAR(50) NOT NULL,
-    aggregate_id UUID NOT NULL,
+    aggregate_id UUID,
     payload JSONB NOT NULL DEFAULT '{}'::jsonb,
     status workflow.outbox_status NOT NULL DEFAULT 'PENDING',
     retry_count INT NOT NULL DEFAULT 0,
