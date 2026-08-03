@@ -1,13 +1,28 @@
 import json
-from typing import Callable, Dict, Any, Awaitable
+from typing import Callable, Dict, Any, Awaitable, Type
 
 from infrastructure.nats.nats_client import NatsClient
+from packages.events.base import BaseEvent
+from packages.events.context import RequestContext
+from packages.events.serializer import EventSerializer
 from packages.logging.structured_logs import struc_logger as logger
 
 class Subscriber:
     def __init__(self, client: NatsClient):
         self.client = client
         self._subscriptions = []
+        self._event_handlers : Dict[Type[BaseEvent], Callable[[BaseEvent], Awaitable[None]]] = {}
+
+    def register_handler(self,event_cls: Type[BaseEvent],handler: Callable[[BaseEvent], Awaitable[None]]) -> None:
+        """Registers a typed domain handler for a specific BaseEvent class."""
+        self._event_handlers[event_cls] = handler
+
+    def on_event(self, event_cls: Type[BaseEvent]):
+        def decorator(func: Callable[[BaseEvent], Awaitable[None]]):
+            self.register_handler(event_cls, func)
+            return func
+        return decorator
+
     async def subscribe(
         self,
         stream: str,
@@ -20,27 +35,49 @@ class Subscriber:
 
         async def _msg_handler(msg):
             try:
-                raw_payload = json.loads(msg.data.decode("utf-8"))
-                metadata = {
-                    "subject": msg.subject,
-                    "headers": dict(msg.headers) if msg.headers else {},
-                    "reply": msg.reply
-                }
-                await handler(raw_payload, metadata)
-                await msg.ack()
-            except Exception as e:
-                logger.error(f"Error handling message on subject '{subject}': {e}", exc_info=True)
+                if handler is None:
+                    typed_event, envelope = EventSerializer.deserialize_event(msg.data)
+                    RequestContext.set(
+                        correlation_id=envelope.correlation_id,
+                        tenant_id=envelope.tenant_id,
+                        causation_id=envelope.message_id
+                    )
 
-        await self.client.js.subscribe(
+                    registered_handler = self._event_handlers.get(type(typed_event))
+                    if registered_handler:
+                        await registered_handler(typed_event)
+                    else:
+                        logger.warning(f"No handler registered for typed event '{typed_event.event_name}'")
+                else:
+                    # Legacy / fallback raw dict handler
+                    raw_payload = json.loads(msg.data.decode("utf-8"))
+                    metadata = {
+                        "subject": msg.subject,
+                        "headers": dict(msg.headers) if msg.headers else {},
+                        "reply": msg.reply
+                    }
+                    await handler(raw_payload, metadata)
+
+                    # Acknowledge message only after successful processing
+                await msg.ack()
+
+            except Exception as e:
+                logger.error(
+                    f"Error handling message on subject '{subject}': {e}",
+                    exc_info=True
+                )
+
+        sub = await self.client.js.subscribe(
             subject=subject,
             durable=durable_name,
-            queue = durable_name,
+            queue=durable_name,
             stream=stream,
             cb=_msg_handler,
             manual_ack=True
         )
-        logger.info(f"Subscribed to subject '{subject}' on stream '{stream}' (durable={durable_name})")
 
+        self._subscriptions.append(sub)
+        logger.info(f"Subscribed to subject '{subject}' on stream '{stream}' (durable={durable_name})")
     async def unsubscribe_all(self) -> None:
         for sub in self._subscriptions:
             try:
