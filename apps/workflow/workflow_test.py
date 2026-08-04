@@ -13,9 +13,17 @@ from apps.workflow.domain.outbox import OutboxStatus, OutboxEvent
 from apps.workflow.infrastructure.outbox_publisher import workflow_outbox_publisher
 from apps.workflow.infrastructure.database import workflow_db_client as db_client, workflow_db_session
 from apps.workflow.workflow_main import app
+from packages.auth.auth_jwt import get_current_user
 
 DATA = {}
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="starlette")
+MOCK_USER = ({"id": "test-user-id", "email": "test@example.com", "role": "admin"})
+
+@pytest.fixture(autouse=True)
+def override_auth_dependency():
+    app.dependency_overrides[get_current_user] = lambda: MOCK_USER
+    yield
+    app.dependency_overrides.clear()
 
 @pytest.fixture(scope="function", autouse=True)
 def db_session():
@@ -44,8 +52,9 @@ def db_session():
 
 @pytest_asyncio.fixture
 async def client():
+    headers = {"Authorization": f"Bearer {MOCK_USER}"}
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+    async with AsyncClient(transport=transport, base_url="http://test", headers = headers ) as ac:
         async with app.router.lifespan_context(app):
             yield ac
 
