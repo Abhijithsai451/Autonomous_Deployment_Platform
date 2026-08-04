@@ -49,14 +49,14 @@ class EventBus:
     async def register_listener(self,
                                 subject: str,
                                 durable_name: str,
-                                handler: Callable[[Dict[str, Any], Dict[str, Any]], Awaitable[None]]
+                                handler: Callable[[Dict[str, Any], Dict[str, Any]], Awaitable[None]],
+                                stream: str = None
                                 ) -> None:
         full_subject = (
-            subject if subject.startswith(f"{self.service}.")
-            else f"{self.service}.{subject}"
+            subject if "." in subject else f"{self.subject_prefix}.{subject}"
         )
         await self.subscriber.subscribe(
-            stream=self.stream_name,
+            stream=stream,
             subject=full_subject,
             durable_name=durable_name,
             handler=handler

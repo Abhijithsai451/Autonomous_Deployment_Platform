@@ -5,6 +5,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from apps.identity.domain.api_key import ApiKey
+from apps.identity.domain.events.user_events import UserInvitedEvent
 from apps.identity.domain.organization import Organization
 from apps.identity.domain.role import Role
 from apps.identity.domain.service_account import ServiceAccount
@@ -44,7 +45,8 @@ class IdentityService:
         self.db.add(user)
         self.db.commit()
         self.db.refresh(user)
-        await nats.publish("UserInvited", {"id": str(user.id), "email": user.email})
+        event = UserInvitedEvent(id=user.id, keycloak_user_id=k_id)
+        await nats.publish(event.subject, {"id": str(user.id), "email": user.email})
         return user
 
     async def update_user_status(self, user_id: UUID, status: str) -> User:

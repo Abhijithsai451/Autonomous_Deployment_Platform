@@ -14,6 +14,8 @@ class KeycloakClient:
             username=settings.KEYCLOAK_ADMIN_USER,
             password=settings.KEYCLOAK_ADMIN_PASSWORD,
             realm_name=settings.KEYCLOAK_REALM,
+            user_realm_name="master",
+            client_id="admin-cli",
             verify=True
         )
 
@@ -33,7 +35,8 @@ class KeycloakClient:
             "email" : email,
             "username": email,
             "enabled": True,
-            "first_name": display_name,
+            "firstName": display_name,
+            "emailVerified": True,
         }, exist_ok = False)
 
     def disable_external_user(self, keycloak_user_id: str):

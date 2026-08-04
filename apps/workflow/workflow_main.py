@@ -15,6 +15,14 @@ from apps.workflow.infrastructure.workflow_nats_client import workflow_nats_clie
 async def example_workflow_logging_handler(payload: dict, metadata: dict):
     logger.info(f"Received event tracking hook: {metadata.get('event_type')} - ID: {payload.get('id')}")
 
+async def department_created_event_handler(payload: dict, metadata: dict):
+    dept_id = payload.get("id")
+    description = payload.get("description")
+
+    logger.info(
+        f"🎉 [Phase 4 Chain Complete!] Workflow Service received DepartmentCreated: "
+        f"Dept ID={dept_id}, Description='{description}'"
+    )
 
 @asynccontextmanager
 async def workflow_lifespan(app: FastAPI):
@@ -27,7 +35,7 @@ async def workflow_lifespan(app: FastAPI):
     await nats.register_listener(
         subject="Initialized",
         durable_name=durable_name,
-        handler=idempotent_listener(consumer_group=durable_name)(example_workflow_logging_handler))
+        handler=department_created_event_handler)
     yield
 
     workflow_outbox_publisher.stop()
