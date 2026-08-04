@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 
 from apps.workflow.domain.outbox import OutboxEvent, OutboxStatus
 from apps.workflow.domain.workflow_blueprints import WorkflowBlueprint
-from apps.workflow.domain.workflow_event import WorkflowEvent
 
 class BlueprintService:
     def __init__(self, db: Session):
@@ -48,7 +47,6 @@ class BlueprintService:
         self.db.add(blueprint)
         self.db.flush()
 
-        # Stage Outbox + Audit records atomically
         self._log_event(
             blueprint_id=blueprint.id,
             event_type="BlueprintCreated",
@@ -78,7 +76,7 @@ class BlueprintService:
             if hasattr(blueprint, k):
                 setattr(blueprint, k, v)
 
-        # Stage Outbox + Audit records
+
         self._log_event(
             blueprint_id=blueprint.id,
             event_type="BlueprintUpdated",

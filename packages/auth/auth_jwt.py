@@ -1,12 +1,12 @@
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any
 
 from fastapi import Depends, HTTPException, status
 
 import jwt
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel
 
 from apps.identity.config.identity_settings import identity_settings as settings
+from packages.auth.auth_user import AuthUser
 from packages.logging.structured_logs import struc_logger
 
 logger = struc_logger
@@ -18,20 +18,6 @@ KEYCLOAK_REALM = settings.KEYCLOAK_REALM
 
 JWKS_URL = f"{KEYCLOAK_URL}/realm/{KEYCLOAK_REALM}/protocol/openid-connect/certs"
 jwks_client = jwt.PyJWKClient(JWKS_URL)
-
-
-class CurrentUser(BaseModel):
-    id: str
-    email: Optional[str] = None
-    username: Optional[str] = None
-    realm_roles: List[str] = []
-    client_roles: List[str] = []
-
-    def has_realm_role(self, role: str) -> bool:
-        return role in self.realm_roles
-
-    def has_client_role(self, role: str) -> bool:
-        return role in self.client_roles
 
 
 async def verify_jwt(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Dict[str, Any]:
@@ -58,10 +44,10 @@ async def verify_jwt(credentials: HTTPAuthorizationCredentials = Depends(securit
         )
 
 
-async def get_current_user(token: dict = Depends(verify_jwt)) -> CurrentUser:
+async def get_current_user(token: dict = Depends(verify_jwt)) -> AuthUser:
     realm_roles = token.get("realm_access", {}).get("roles", [])
 
-    return CurrentUser(
+    return AuthUser(
         id=token.get("sub"),
         email=token.get("email"),
         username=token.get("preferred_username"),
