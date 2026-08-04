@@ -16,15 +16,30 @@ log_manager = StructuredLogger(
 async def example_organization_logging_handler(payload: dict, metadata: dict):
     logger.info(f"Received event tracking hook: {metadata.get('event_type')} - ID: {payload.get('id')}")
 
+async def user_invited_event_handler(payload: dict, metadata: dict):
+    user_id = payload.get("id")
+    email = payload.get("email")
+    logger.info(f" Organization received UserInvited event for User: {user_id} {email}")
+    logger.info("Organization publishing DepartmentCreated Event ")
+    await nats.publish(
+        event_type="organization.events.department.created",
+        payload = {
+            "id": f"dept-for-{user_id}",
+            "name": "Default Department",
+            "organization_id": "org-001"
+        }
+    )
+
 @asynccontextmanager
 async def organization_lifespan(app: FastAPI):
     await nats.initialize()
     logger.info("NATS Messaging Core successfully initialized.")
-
+    await nats.client.ensure_stream(stream_name="identity_events", subjects=['identity.>'])
     await nats.register_listener(
-        subject="UserInvited",
+        subject="identity.events.user.invited",
         durable_name="organization-service-user-invited-worker",
-        handler=example_organization_logging_handler
+        handler=user_invited_event_handler,
+        stream = "identity_events"
         )
     yield
     await nats.shutdown()

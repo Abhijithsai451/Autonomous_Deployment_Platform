@@ -7,8 +7,9 @@ from sqlalchemy.orm import Session
 from apps.organization.application.project_service import ProjectService
 from apps.organization.domain.project import Project
 from apps.organization.infrastructure.database import org_db_session
+from packages.auth.auth_jwt import get_current_user
 
-router = APIRouter(prefix="/projects", tags=["Projects"])
+router = APIRouter(prefix="/projects", tags=["Projects"], dependencies=[Depends(get_current_user)])
 
 class CreateProjectSchema(BaseModel):
     organization_id: UUID

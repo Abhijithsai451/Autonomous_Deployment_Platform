@@ -7,8 +7,9 @@ from sqlalchemy.orm import Session
 from apps.organization.application.department_service import DepartmentService
 from apps.organization.domain.department import Department
 from apps.organization.infrastructure.database import org_db_session
+from packages.auth.auth_jwt import get_current_user
 
-router = APIRouter(prefix="/departments", tags=["Departments"])
+router = APIRouter(prefix="/departments", tags=["Departments"], dependencies=[Depends(get_current_user)])
 
 class CreateDepartmentSchema(BaseModel):
     organization_id: UUID
