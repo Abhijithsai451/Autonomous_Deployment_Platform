@@ -54,7 +54,6 @@ class InstanceService:
         return instance
 
     def start_instance(self, instance_id: UUID) -> WorkflowInstance:
-        """Starts a workflow instance and unlocks initial root tasks (tasks with no dependencies)."""
         instance = self.db.get(WorkflowInstance, instance_id)
         if not instance:
             raise HTTPException(
@@ -71,13 +70,12 @@ class InstanceService:
             payload={"blueprint_id": str(instance.blueprint_id)}
         )
 
-        # Unlock initial root tasks (tasks without dependencies) for this instance
         root_tasks = (
             self.db.query(Task)
             .filter(
                 Task.workflow_instance_id == instance_id,
                 Task.status == TaskStatus.PENDING,
-                ~Task.dependencies.any()  # Root task check
+                Task.dependencies.any()
             )
             .all()
         )
@@ -95,7 +93,6 @@ class InstanceService:
         return instance
 
     def complete_instance(self, instance_id: UUID, output_data: Optional[dict] = None) -> WorkflowInstance:
-        """Marks a workflow instance as COMPLETED."""
         instance = self.db.get(WorkflowInstance, instance_id)
         if not instance:
             raise HTTPException(
@@ -119,7 +116,6 @@ class InstanceService:
         return instance
 
     def fail_instance(self, instance_id: UUID, error_details: Optional[dict] = None) -> WorkflowInstance:
-        """Marks a workflow instance as FAILED."""
         instance = self.db.get(WorkflowInstance, instance_id)
         if not instance:
             raise HTTPException(
@@ -245,12 +241,3 @@ class InstanceService:
         self.db.commit()
         self.db.refresh(instance)
         return instance
-
-    """ def timeout_instance(self, instance_id: UUID, reason: str = "Timeout reached") -> WorkflowInstance:
-        instance = self.get_instance_by_id(instance_id)
-        instance.status = WorkflowStatus.FAILED
-        instance.completed_at = datetime.now(timezone.utc)
-        self._log_event(instance.id, "WorkflowTimedOut", {"reason": reason})
-        self.db.commit()
-        self.db.refresh(instance)
-        return instance"""

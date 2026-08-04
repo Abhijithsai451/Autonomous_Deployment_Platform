@@ -19,6 +19,7 @@ class EventBus:
         self.subscriber = Subscriber(self.client)
 
     async def initialize(self)-> None:
+        # Connects to the NATS Client
         await self.client.connect()
         await self.client.ensure_stream(
             stream_name = self.stream_name,
@@ -26,6 +27,7 @@ class EventBus:
         )
         logger.info(f"EventBus initialized for service '{self.service}'.")
     async def publish(self, event_type: str, payload: Dict[str, Any])-> None:
+        # Calls the publisher.publish function to send a message.
         subject= (
             event_type if event_type.startswith(f"{self.service}.")
             else f"{self.subject_prefix}.{event_type}"
