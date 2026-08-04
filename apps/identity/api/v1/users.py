@@ -8,8 +8,9 @@ from apps.identity.application.identity_service import IdentityService
 from apps.identity.domain.user import User
 from apps.identity.infrastructure.database import get_db_session
 from apps.identity.infrastructure.keycloak_client import KeycloakClient
+from packages.auth.auth_jwt import get_current_user, CurrentUser
 
-router = APIRouter(prefix="/users", tags=["Users"])
+router = APIRouter(prefix="/users", tags=["Users"], dependencies=[Depends(get_current_user)])
 
 class InviteUserSchema(BaseModel):
     organization_id: UUID
@@ -19,6 +20,13 @@ class InviteUserSchema(BaseModel):
 class StatusUpdateSchema(BaseModel):
     status: str
 
+async def get_me(current_user: CurrentUser = Depends(get_current_user)):
+    return {
+        "user_id": current_user.id,
+        "email": current_user.email,
+        "username": current_user.username,
+        "roles": current_user.realm_roles,
+    }
 @router.post("/invite")
 async def invite(payload: InviteUserSchema, db: Session = Depends(get_db_session)):
     svc = IdentityService(db, KeycloakClient())

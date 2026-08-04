@@ -7,8 +7,9 @@ from sqlalchemy.orm import Session
 
 from apps.workflow.application.blueprint_service import BlueprintService
 from apps.workflow.infrastructure.database import workflow_db_session
+from packages.auth import auth_jwt
 
-router = APIRouter(prefix="/blueprints", tags=["Workflow Blueprints"])
+router = APIRouter(prefix="/blueprints", tags=["Workflow Blueprints"], dependencies=[Depends(auth_jwt)])
 
 
 class CreateBlueprintSchema(BaseModel):

@@ -7,8 +7,9 @@ from sqlalchemy.orm import Session
 from apps.workflow.application.task_service import TaskService
 from apps.workflow.domain.exceptions import InvalidStateTransitionError
 from apps.workflow.infrastructure.database import workflow_db_session
+from packages.auth import auth_jwt
 
-router = APIRouter(tags=["Tasks"])
+router = APIRouter(tags=["Tasks"], dependencies=[Depends(auth_jwt)])
 
 class StartTaskSchema(BaseModel):
     assigned_agent_id: Optional[UUID] = None

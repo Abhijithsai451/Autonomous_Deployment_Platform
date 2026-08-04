@@ -5,8 +5,9 @@ from uuid import UUID
 from apps.organization.application.org_service import OrganizationService
 from apps.organization.domain.organization import Organization
 from apps.organization.infrastructure.database import org_db_session
+from packages.auth import auth_jwt
 
-router = APIRouter(prefix="/organizations",tags=["Organizations"])
+router = APIRouter(prefix="/organizations",tags=["Organizations"], dependencies=[Depends(auth_jwt)])
 
 class CreateOrgSchema(BaseModel):
     name: str

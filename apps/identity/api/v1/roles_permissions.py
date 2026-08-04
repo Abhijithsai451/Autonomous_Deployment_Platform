@@ -9,8 +9,9 @@ from apps.identity.domain.permission import Permission
 from apps.identity.domain.role import Role
 from apps.identity.infrastructure.database import get_db_session
 from apps.identity.infrastructure.keycloak_client import KeycloakClient
+from packages.auth import auth_jwt
 
-router = APIRouter(tags= ["Roles & Permissions"])
+router = APIRouter(tags= ["Roles & Permissions"], dependencies=[Depends(auth_jwt)])
 
 class CreateRoleSchema(BaseModel):
     organization_id: UUID
