@@ -274,7 +274,7 @@ async def test_api_keys_list(client):
 @pytest.mark.anyio
 async def test_api_keys_create(client):
     payload = {
-        "organization_id": str(DATA.get("org_id", uuid.uuid4())),
+        "user_id": str(DATA.get("user_id", uuid.uuid4())),
         "service_account_id": str(DATA.get("service_account_id", uuid.uuid4())),
         "hashed_key": "raw_test_hashed_string"
     }

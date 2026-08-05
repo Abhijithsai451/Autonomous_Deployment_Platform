@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from apps.identity.application.auth_service import AuthService
-from apps.identity.infrastructure.database import get_db_session
+from apps.identity.infrastructure.database import identity_db_session
 from apps.identity.infrastructure.keycloak_client import KeycloakClient
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -15,7 +15,7 @@ class RefreshRequest(BaseModel):
 @router.post("/login")
 def login(
         form_data: OAuth2PasswordRequestForm = Depends(),
-        db: Session = Depends(get_db_session)
+        db: Session = Depends(identity_db_session)
     ):
     keycloak_client = KeycloakClient()
     auth_service = AuthService(db, keycloak_client)
@@ -35,7 +35,7 @@ def login(
         )
 
 @router.post("/logout")
-def logout(payload: RefreshRequest, db: Session = Depends(get_db_session)):
+def logout(payload: RefreshRequest, db: Session = Depends(identity_db_session)):
     keycloak_client = KeycloakClient()
     auth_service = AuthService(db, keycloak_client)
     try:
@@ -45,7 +45,7 @@ def logout(payload: RefreshRequest, db: Session = Depends(get_db_session)):
         raise HTTPException(status_code=400, detail="Logout failed")
 
 @router.post("/refresh")
-def refresh(payload: RefreshRequest, db: Session = Depends(get_db_session)):
+def refresh(payload: RefreshRequest, db: Session = Depends(identity_db_session)):
     keycloak_client = KeycloakClient()
     auth_service = AuthService(db, keycloak_client)
     try:
@@ -60,7 +60,7 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db_session)):
         raise HTTPException(status_code=400, detail="Invalid token transformation")
 
 @router.get("/me")
-def me(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db_session)):
+def me(token: str = Depends(oauth2_scheme), db: Session = Depends(identity_db_session)):
     keycloak_client = KeycloakClient()
     auth_service = AuthService(db, keycloak_client)
     try:

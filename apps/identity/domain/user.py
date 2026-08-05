@@ -27,8 +27,6 @@ class User(Base):
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    organization_id = Column(UUID(as_uuid=True), ForeignKey("identity.organizations.id", ondelete="CASCADE"),
-                             nullable=False)
     keycloak_user_id = Column(UUID(as_uuid=True), unique=True, index=True, nullable=False)
     email = Column(String(320), nullable=False)
     display_name = Column(String(255), nullable=True)
@@ -43,6 +41,4 @@ class User(Base):
 
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-
-    organization = relationship("Organization", back_populates="users")
     roles = relationship("Role", secondary=user_roles)

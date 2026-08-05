@@ -5,8 +5,8 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from apps.identity.domain.api_key import ApiKey
+from apps.identity.domain.domain import OutboxEvent, OutboxStatus
 from apps.identity.domain.events.user_events import UserInvitedEvent
-from apps.identity.domain.organization import Organization
 from apps.identity.domain.role import Role
 from apps.identity.domain.service_account import ServiceAccount
 from apps.identity.domain.user import UserStatus, User
@@ -18,29 +18,24 @@ class IdentityService:
     def __init__(self, db: Session, keycloak: KeycloakClient):
         self.db = db
         self.keycloak = keycloak
-
-    # --- Organizations ---
-    async def create_organization(self, name: str, slug: str, plan: str) -> Organization:
-        org = Organization(name=name, slug=slug, plan=plan)
-        self.db.add(org)
+    def _log_event(self, user_id: UUID, event_type: str, payload:dict)-> OutboxEvent:
+        outbox_entry = OutboxEvent(
+                event_type = f"identity.events.{event_type}",
+                aggregate_type=user_id,
+                payload= {
+                    "user_id": str(user_id),
+                    **payload
+                },
+            status = OutboxStatus.PENDING
+        )
+        self.db.add(outbox_entry)
         self.db.commit()
-        self.db.refresh(org)
-        await nats.publish("OrganizationCreated", {"id": str(org.id), "slug": org.slug})
-        return org
-
-    async def update_organization(self, org_id: UUID, updates: dict) -> Organization:
-        org = self.db.query(Organization).filter(Organization.id == org_id).first()
-        if org:
-            for k, v in updates.items():
-                setattr(org, k, v)
-            self.db.commit()
-            await nats.publish("OrganizationUpdated", {"id": str(org.id)})
-        return org
+        return outbox_entry
 
     # --- Users ---
-    async def invite_user(self, org_id: UUID, email: str, display_name: str) -> User:
+    async def invite_user(self, user_id: UUID, email: str, display_name: str) -> User:
         k_id = self.keycloak.create_external_user(email, display_name)
-        user = User(organization_id=org_id, keycloak_user_id=k_id, email=email, display_name=display_name,
+        user = User(id=user_id, keycloak_user_id=k_id, email=email, display_name=display_name,
                     status=UserStatus.INVITED)
         self.db.add(user)
         self.db.commit()
