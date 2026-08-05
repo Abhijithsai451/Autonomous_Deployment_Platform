@@ -12,28 +12,16 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp" SCHEMA identity;
 -- ========================================================
 -- ENUMS
 -- ========================================================
-CREATE TYPE identity.org_status AS ENUM ('ACTIVE', 'SUSPENDED', 'ARCHIVED');
-CREATE TYPE identity.org_plan AS ENUM ('FREE', 'PRO', 'ENTERPRISE');
 CREATE TYPE identity.user_status AS ENUM ('ACTIVE', 'INVITED', 'DISABLED');
+CREATE TYPE identity.outbox_status AS ENUM ('PENDING', 'PROCESSING', 'PUBLISHED', 'FAILED');
 
 -- ========================================================
 -- TABLES
 -- ========================================================
 
-CREATE TABLE identity.organizations (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name VARCHAR(255) NOT NULL,
-    slug VARCHAR(100) UNIQUE NOT NULL,
-    status identity.org_status NOT NULL DEFAULT 'ACTIVE',
-    plan identity.org_plan NOT NULL DEFAULT 'FREE',
-    settings JSONB NOT NULL DEFAULT '{}'::jsonb,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
 CREATE TABLE identity.users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    organization_id UUID NOT NULL REFERENCES identity.organizations(id) ON DELETE CASCADE,
+    organization_id UUID NOT NULL,
     keycloak_user_id UUID UNIQUE NOT NULL,
     email VARCHAR(320) NOT NULL,
     display_name VARCHAR(255),
@@ -49,7 +37,7 @@ CREATE TABLE identity.users (
 
 CREATE TABLE identity.roles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    organization_id UUID NOT NULL REFERENCES identity.organizations(id) ON DELETE CASCADE,
+    organization_id UUID NOT NULL,
     name VARCHAR(100) NOT NULL,
     description TEXT,
     system_role BOOLEAN NOT NULL DEFAULT FALSE,
@@ -91,7 +79,7 @@ CREATE TABLE identity.sessions (
 
 CREATE TABLE identity.service_accounts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    organization_id UUID NOT NULL REFERENCES identity.organizations(id) ON DELETE CASCADE,
+    organization_id UUID NOT NULL,
     client_id VARCHAR(100) UNIQUE NOT NULL,
     description TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -99,7 +87,7 @@ CREATE TABLE identity.service_accounts (
 
 CREATE TABLE identity.api_keys (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    organization_id UUID NOT NULL REFERENCES identity.organizations(id) ON DELETE CASCADE,
+    organization_id UUID NOT NULL,
     service_account_id UUID REFERENCES identity.service_accounts(id) ON DELETE CASCADE,
     name VARCHAR(100) NOT NULL,
     hashed_key VARCHAR(255) NOT NULL,
@@ -108,56 +96,65 @@ CREATE TABLE identity.api_keys (
     revoked_at TIMESTAMPTZ
 );
 
+CREATE TABLE IF NOT EXISTS identity.outbox_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_type VARCHAR(100) NOT NULL,
+    aggregate_type VARCHAR(50) NOT NULL,
+    aggregate_id UUID,
+    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+    status identity.outbox_status NOT NULL DEFAULT 'PENDING',
+    retry_count INT NOT NULL DEFAULT 0,
+    error_message TEXT,
+    max_retries INT NOT NULL DEFAULT 5,
+    last_error TEXT DEFAULT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    processed_at TIMESTAMP WITH TIME ZONE
+);
+
+-- ========================================================
 -- PERFORMANCE INDEXES
+-- ========================================================
 CREATE INDEX idx_users_organization ON identity.users(organization_id);
 CREATE INDEX idx_users_email ON identity.users(email);
 CREATE INDEX idx_users_status ON identity.users(status);
-CREATE INDEX idx_organizations_status ON identity.organizations(status);
 CREATE INDEX idx_roles_organization ON identity.roles(organization_id);
 CREATE INDEX idx_sessions_user ON identity.sessions(user_id);
+CREATE INDEX idx_service_accounts_organization ON identity.service_accounts(organization_id);
+CREATE INDEX idx_api_keys_organization ON identity.api_keys(organization_id);
 CREATE INDEX idx_api_keys_hash ON identity.api_keys(hashed_key);
-CREATE INDEX idx_org_settings_gin ON identity.organizations USING gin(settings);
+CREATE INDEX IF NOT EXISTS idx_outbox_status ON identity.outbox_events(status);
+CREATE INDEX IF NOT EXISTS idx_outbox_event_type ON identity.outbox_events(event_type);
+CREATE INDEX IF NOT EXISTS idx_outbox_aggregate ON identity.outbox_events(aggregate_type, aggregate_id);
 
 -- ========================================================
---  SEED DATA
+-- SEED DATA
 -- ========================================================
 BEGIN;
 
--- SEED ORGANIZATIONS
-WITH inserted_orgs_raw AS (
-    INSERT INTO identity.organizations (name, slug, status, plan, settings) VALUES
-    ('Enterprise Corp 1', 'enterprise-corp-1', 'ACTIVE', 'FREE', '{}'),
-    ('Enterprise Corp 2', 'enterprise-corp-2', 'ACTIVE', 'FREE', '{}'),
-    ('Enterprise Corp 3', 'enterprise-corp-3', 'ACTIVE', 'PRO', '{}'),
-    ('Enterprise Corp 4', 'enterprise-corp-4', 'ACTIVE', 'FREE', '{}'),
-    ('Enterprise Corp 5', 'enterprise-corp-5', 'ACTIVE', 'ENTERPRISE', '{}'),
-    ('Enterprise Corp 6', 'enterprise-corp-6', 'ACTIVE', 'FREE', '{}'),
-    ('Enterprise Corp 7', 'enterprise-corp-7', 'ACTIVE', 'FREE', '{}'),
-    ('Enterprise Corp 8', 'enterprise-corp-8', 'ACTIVE', 'PRO', '{}'),
-    ('Enterprise Corp 9', 'enterprise-corp-9', 'ACTIVE', 'FREE', '{}'),
-    ('Enterprise Corp 10', 'enterprise-corp-10', 'ACTIVE', 'ENTERPRISE', '{}')
-    RETURNING id
-),
-inserted_orgs AS (
-    SELECT id, row_number() OVER (ORDER BY id) as rn FROM inserted_orgs_raw
+-- SEED TENANT / ORGANIZATION IDS
+WITH mock_orgs AS (
+    SELECT
+        gen_random_uuid() AS id,
+        rn
+    FROM generate_series(1, 10) AS rn
 ),
 
 -- SEED USERS
 inserted_users_raw AS (
     INSERT INTO identity.users (organization_id, keycloak_user_id, email, display_name, status)
     SELECT id, gen_random_uuid(), 'user.' || rn || '@enterprisecorp.com', 'Developer User ' || rn, 'ACTIVE'::identity.user_status
-    FROM inserted_orgs
+    FROM mock_orgs
     RETURNING id, organization_id
 ),
 inserted_users AS (
     SELECT id, organization_id, row_number() OVER (ORDER BY id) as rn FROM inserted_users_raw
 ),
 
--- SEED ROLES (Populating planned description field)
+-- SEED ROLES
 inserted_roles_raw AS (
     INSERT INTO identity.roles (organization_id, name, description, system_role)
     SELECT orgs.id, r_templates.name, r_templates.description, r_templates.sys_role
-    FROM inserted_orgs orgs
+    FROM mock_orgs orgs
     CROSS JOIN (VALUES
         ('AdminRole', 'Full administrative access over all resource schemas', true),
         ('DeveloperRole', 'Read-oriented access policies for operations workspaces', false)
@@ -168,7 +165,7 @@ inserted_roles AS (
     SELECT id, organization_id, name, row_number() OVER (ORDER BY id) as rn FROM inserted_roles_raw
 ),
 
--- SEED PERMISSIONS (Populating planned description field)
+-- SEED PERMISSIONS
 inserted_permissions_raw AS (
     INSERT INTO identity.permissions (name, description, resource, action) VALUES
     ('identity.read', 'Allows reading identities, groups, and scopes', 'identity', 'read'),
@@ -187,7 +184,7 @@ inserted_permissions AS (
     SELECT id, name, row_number() OVER (ORDER BY id) as rn FROM inserted_permissions_raw
 ),
 
---  SEED ROLE_PERMISSIONS
+-- SEED ROLE_PERMISSIONS
 inserted_role_perms AS (
     INSERT INTO identity.role_permissions (role_id, permission_id)
     SELECT r.id, p.id FROM inserted_roles r
@@ -196,7 +193,7 @@ inserted_role_perms AS (
     RETURNING role_id
 ),
 
---  SEED USER_ROLES
+-- SEED USER_ROLES
 inserted_user_roles AS (
     INSERT INTO identity.user_roles (user_id, role_id)
     SELECT u.id, r.id FROM inserted_users u
@@ -205,7 +202,7 @@ inserted_user_roles AS (
     RETURNING user_id
 ),
 
---  SEED SESSIONS
+-- SEED SESSIONS
 inserted_sessions AS (
     INSERT INTO identity.sessions (user_id, device_name, ip_address, user_agent, metadata, expires_at)
     SELECT id, 'Chrome Mac / Dev Instance', '127.0.0.1'::inet, 'Mozilla/5.0 PyTest/Runner', '{"agent": "seed-script"}'::jsonb, NOW() + INTERVAL '24 hours'
@@ -213,17 +210,48 @@ inserted_sessions AS (
     RETURNING id
 ),
 
---  SEED SERVICE_ACCOUNTS
+-- SEED SERVICE_ACCOUNTS
 inserted_service_accounts AS (
     INSERT INTO identity.service_accounts (organization_id, client_id, description)
     SELECT id, 'sa-client-id-00' || rn, 'Automated CI/CD account for organization'
-    FROM inserted_orgs
+    FROM mock_orgs
     RETURNING id, organization_id
 )
 
---  SEED API_KEYS (Populating planned name and revoked_at properties cleanly)
+-- SEED API_KEYS
 INSERT INTO identity.api_keys (organization_id, service_account_id, name, hashed_key, expires_at, revoked_at)
 SELECT organization_id, id, 'Default CI Key', 'mocked_argon2_or_sha256_hash_value_string_' || row_number() OVER (), NOW() + INTERVAL '365 days', NULL
 FROM inserted_service_accounts;
+
+-- SEED OUTBOX USER CREATED EVENTS
+INSERT INTO identity.outbox_events (event_type, aggregate_type, aggregate_id, payload, status)
+SELECT
+    'identity.user.created',
+    'USER',
+    id,
+    jsonb_build_object(
+        'email', email,
+        'display_name', display_name,
+        'organization_id', organization_id,
+        'status', status
+    ),
+    'PENDING'::identity.outbox_status
+FROM identity.users
+LIMIT 10;
+
+-- SEED OUTBOX ROLE ASSIGNED EVENTS
+INSERT INTO identity.outbox_events (event_type, aggregate_type, aggregate_id, payload, status)
+SELECT
+    'identity.role.assigned',
+    'USER_ROLE',
+    user_id,
+    jsonb_build_object(
+        'user_id', user_id,
+        'role_id', role_id,
+        'assigned_at', NOW()
+    ),
+    'PENDING'::identity.outbox_status
+FROM identity.user_roles
+LIMIT 10;
 
 COMMIT;
