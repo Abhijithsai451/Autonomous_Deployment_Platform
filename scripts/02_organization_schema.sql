@@ -55,6 +55,20 @@ CREATE TABLE IF NOT EXISTS organization.departments (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+CREATE TABLE IF NOT EXISTS organization.outbox_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_type VARCHAR(100) NOT NULL,
+    aggregate_type VARCHAR(50) NOT NULL,
+    aggregate_id UUID,
+    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+    status workflow.outbox_status NOT NULL DEFAULT 'PENDING',
+    retry_count INT NOT NULL DEFAULT 0,
+    error_message TEXT,
+    max_retries INT NOT NULL DEFAULT 5,
+    last_error TEXT DEFAULT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    processed_at TIMESTAMP WITH TIME ZONE
+);
 -- ========================================================
 --  PERFORMANCE INDEXES
 -- ========================================================
@@ -68,6 +82,10 @@ CREATE INDEX IF NOT EXISTS idx_departments_status ON organization.departments(st
 CREATE INDEX IF NOT EXISTS idx_organizations_general_settings_gin ON organization.organizations USING gin(general_settings);
 CREATE INDEX IF NOT EXISTS idx_projects_metadata_gin ON organization.projects USING gin(metadata);
 CREATE INDEX IF NOT EXISTS idx_departments_metadata_gin ON organization.departments USING gin(metadata);
+CREATE INDEX IF NOT EXISTS idx_outbox_status ON organization.outbox_events(status);
+CREATE INDEX IF NOT EXISTS idx_outbox_event_type ON organization.outbox_events(event_type);
+CREATE INDEX IF NOT EXISTS idx_outbox_aggregate ON organization.outbox_events(aggregate_type, aggregate_id);
+CREATE INDEX IF NOT EXISTS idx_processed_events ON organization.processed_events(consumer_group,processed_at);
 
 -- ========================================================
 --  SEED DATA
@@ -107,5 +125,36 @@ SELECT
     'Department focusing on scale and efficiency.',
     jsonb_build_object('budget_code', 'DEPT-' || (100 + i))
 FROM generate_series(1, 15) i;
+
+INSERT INTO organization.outbox_events (event_type, aggregate_type, aggregate_id, payload, status)
+SELECT
+    'organization.updated',
+    'ORGANIZATION',
+    id,
+    jsonb_build_object(
+        'name', name,
+        'plan', plan,
+        'status', status,
+        'updated_at', updated_at
+    ),
+    'PENDING'::workflow.outbox_status
+FROM organization.organizations
+LIMIT 5;
+
+-- Seed Project Created Events
+INSERT INTO organization.outbox_events (event_type, aggregate_type, aggregate_id, payload, status)
+SELECT
+    'organization.project.created',
+    'PROJECT',
+    id,
+    jsonb_build_object(
+        'project_name', name,
+        'organization_id', organization_id,
+        'lifecycle', lifecycle,
+        'metadata', metadata
+    ),
+    'PENDING'::workflow.outbox_status
+FROM organization.projects
+LIMIT 10;
 
 COMMIT;
