@@ -50,9 +50,6 @@ def db_session():
     transaction = connection.begin()
 
     session = db_client.SessionLocal(bind=connection)
-    org = session.execute(text("SELECT id FROM identity.organizations LIMIT 1")).fetchone()
-    if org:
-        DATA["org_id"] = str(org[0])
     user = session.execute(text("SELECT id FROM identity.users LIMIT 1")).fetchone()
     if user:
         DATA["user_id"] = str(user[0])
