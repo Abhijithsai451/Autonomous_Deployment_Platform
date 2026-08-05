@@ -82,12 +82,6 @@ CREATE TABLE IF NOT EXISTS organization.outbox_events (
     processed_at TIMESTAMP WITH TIME ZONE
 );
 
-CREATE TABLE IF NOT EXISTS organization.processed_events (
-    event_id VARCHAR(255) PRIMARY KEY,
-    consumer_group VARCHAR(100) NOT NULL,
-    processed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
-);
-
 -- ========================================================
 -- PERFORMANCE INDEXES
 -- ========================================================
@@ -103,7 +97,6 @@ CREATE INDEX IF NOT EXISTS idx_departments_metadata_gin ON organization.departme
 CREATE INDEX IF NOT EXISTS idx_org_outbox_status ON organization.outbox_events(status);
 CREATE INDEX IF NOT EXISTS idx_org_outbox_event_type ON organization.outbox_events(event_type);
 CREATE INDEX IF NOT EXISTS idx_org_outbox_aggregate ON organization.outbox_events(aggregate_type, aggregate_id);
-CREATE INDEX IF NOT EXISTS idx_org_processed_events ON organization.processed_events(consumer_group, processed_at);
 
 -- ========================================================
 -- SEED DATA

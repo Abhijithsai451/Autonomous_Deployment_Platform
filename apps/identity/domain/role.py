@@ -17,7 +17,6 @@ class Role(Base):
     __table_args__ = {"schema": "identity"}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    organization_id = Column(UUID(as_uuid=True), ForeignKey("identity.organizations.id"), nullable=False)
     name = Column(String(100), nullable=False)
     description = Column(Text, nullable=True)
     system_role = Column(Boolean, default=False, nullable=False)

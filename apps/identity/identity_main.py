@@ -5,7 +5,7 @@ from apps.identity.infrastructure.structured_logs import struct_logger as logger
 from packages.logging.structured_logs import StructuredLogger
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from apps.identity.api.v1 import auth, organizations, users, roles_permissions, service_accounts, api_keys
+from apps.identity.api.v1 import auth, users, roles_permissions, service_accounts, api_keys
 
 log_manager = StructuredLogger(
     service_name="cortexops-identity",
