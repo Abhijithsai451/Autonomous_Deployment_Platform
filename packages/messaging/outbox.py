@@ -44,7 +44,6 @@ class OutboxPublisher:
 
             for event in events:
                 try:
-                    # Dynamically publish using the event's stored type & payload
                     await self.bus.publish(
                         event_type=event.event_type,
                         payload=event.payload
@@ -58,12 +57,18 @@ class OutboxPublisher:
                     processed_count += 1
 
                 except Exception as exc:
-                    current_retries = getattr(event, "retry_count", 0) + 1
-                    event.retry_count = current_retries
-                    event.last_error = str(exc)
+                    if hasattr(event, "mark_failed"):
+                        event.mark_failed(str(exc), max_retries=MAX_OUTBOX_RETRIES)
+                    else:
+                        current_retries = getattr(event, "retry_count", 0) + 1
+                        event.retry_count = current_retries
+                        event.error_message = str(exc)
+                        if current_retries >= MAX_OUTBOX_RETRIES:
+                            event.status = self.status_enum.DEAD_LETTER
+                        else:
+                            event.status = self.status_enum.PENDING
 
-                    if current_retries >= MAX_OUTBOX_RETRIES:
-                        event.status = self.status_enum.DEAD_LETTER
+                    if event.status in (self.status_enum.DEAD_LETTER, self.status_enum.FAILED):
                         logger.error(f"Outbox event {event.id} reached max retries. Sent to DLQ: {exc}")
                         try:
                             await self.bus.publish(
@@ -73,14 +78,15 @@ class OutboxPublisher:
                                     "event_type": event.event_type,
                                     "payload": event.payload,
                                     "error": str(exc),
-                                    "failed_after_retries": current_retries,
+                                    "failed_after_retries": event.retry_count,
                                 }
                             )
                         except Exception as dlq_exc:
                             logger.error(f"Failed to publish to DLQ topic: {dlq_exc}")
                     else:
                         logger.warning(
-                            f"Failed outbox attempt {current_retries}/{MAX_OUTBOX_RETRIES} for event {event.id}: {exc}")
+                            f"Failed outbox attempt {event.retry_count}/{MAX_OUTBOX_RETRIES} for event {event.id}: {exc}"
+                        )
 
             db.commit()
         except Exception as err:
@@ -94,6 +100,8 @@ class OutboxPublisher:
 
         return processed_count
 
+
+
     async def start(self) -> None:
         self._is_running = True
         logger.info("Outbox Publisher Worker started.")
@@ -102,6 +110,8 @@ class OutboxPublisher:
                 count = await self.process_events()
                 if count == 0:
                     await asyncio.sleep(self.poll_interval)
+                else:
+                    await asyncio.sleep(0)
             except Exception as e:
                 logger.error(f"Unexpected error in outbox loop: {e}")
                 await asyncio.sleep(self.poll_interval)
