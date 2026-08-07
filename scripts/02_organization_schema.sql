@@ -23,7 +23,7 @@ CREATE TYPE organization.project_status AS ENUM ('CREATED', 'UPDATED', 'DELETED'
 CREATE TYPE organization.department_status AS ENUM ('CREATED', 'UPDATED', 'DELETED', 'ARCHIVED');
 
 -- Explicitly define OutboxStatus enum for Organization DB
-CREATE TYPE organization.outbox_status AS ENUM ('PENDING', 'PROCESSING', 'PROCESSED', 'FAILED', 'DEAD_LETTER');
+CREATE TYPE organization.outbox_status AS ENUM ('PENDING', 'PROCESSING', 'PUBLISHED', 'FAILED', 'DEAD_LETTER');
 
 -- ========================================================
 -- TABLES
