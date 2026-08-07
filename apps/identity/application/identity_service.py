@@ -5,8 +5,8 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from apps.identity.domain.api_key import ApiKey
-from apps.identity.domain.domain import OutboxEvent, OutboxStatus
-from apps.identity.domain.events.user_events import UserInvitedEvent
+from apps.identity.domain.outbox import OutboxEvent, OutboxStatus
+from apps.identity.domain.events.user_events import *
 from apps.identity.domain.role import Role
 from apps.identity.domain.service_account import ServiceAccount
 from apps.identity.domain.user import UserStatus, User
@@ -18,30 +18,36 @@ class IdentityService:
     def __init__(self, db: Session, keycloak: KeycloakClient):
         self.db = db
         self.keycloak = keycloak
-    def _log_event(self, user_id: UUID, event_type: str, payload:dict)-> OutboxEvent:
+    def _log_event(self, aggregate_id: UUID, aggregate_type: str,  event_type: str, payload:dict):
         outbox_entry = OutboxEvent(
-                event_type = f"identity.events.{event_type}",
-                aggregate_type=user_id,
-                payload= {
-                    "user_id": str(user_id),
-                    **payload
-                },
+                aggregate_id=aggregate_id,
+                aggregate_type=aggregate_type,
+                event_type = event_type,
+                payload= payload,
             status = OutboxStatus.PENDING
         )
         self.db.add(outbox_entry)
-        self.db.commit()
-        return outbox_entry
 
     # --- Users ---
-    async def invite_user(self, user_id: UUID, email: str, display_name: str) -> User:
+    async def invite_user(self, email: str, display_name: str) -> User:
         k_id = self.keycloak.create_external_user(email, display_name)
-        user = User(id=user_id, keycloak_user_id=k_id, email=email, display_name=display_name,
+        user = User(keycloak_user_id=k_id, email=email, display_name=display_name,
                     status=UserStatus.INVITED)
         self.db.add(user)
+
+        user_created_event = UserInvitedEvent(id = user.id, keycloak_user_id= user.keycloak_user_id).subject
+        user_payload = {
+            "id": str(user.id),
+            "keycloak_user_id": str(k_id),
+            "email":user.email,
+            "display_name": user.display_name,
+            "status": user.status.value,
+        }
+        self._log_event(aggregate_id=user.id,aggregate_type="USER",
+                        event_type=user_created_event,payload=user_payload)
+
         self.db.commit()
         self.db.refresh(user)
-        event = UserInvitedEvent(id=user.id, keycloak_user_id=k_id)
-        await nats.publish(event.subject, {"id": str(user.id), "email": user.email})
         return user
 
     async def update_user_status(self, user_id: UUID, status: str) -> User:

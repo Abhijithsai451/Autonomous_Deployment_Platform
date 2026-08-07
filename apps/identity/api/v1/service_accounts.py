@@ -10,7 +10,7 @@ from apps.identity.infrastructure.database import identity_db_session
 from apps.identity.infrastructure.keycloak_client import KeycloakClient
 from packages.auth.auth_jwt import get_current_user
 
-router = APIRouter(prefix="/service-accounts", tags=["Service Accounts"], dependencies=[Depends(get_current_user)])
+router = APIRouter(prefix="/service-accounts", tags=["Service Accounts"]) #, dependencies=[Depends(get_current_user)])
 
 class CreateSASchema(BaseModel):
     organization_id: UUID

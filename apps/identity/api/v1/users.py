@@ -13,7 +13,6 @@ from packages.auth.auth_jwt import get_current_user, AuthUser
 router = APIRouter(prefix="/users", tags=["Users"], dependencies=[Depends(get_current_user)])
 
 class InviteUserSchema(BaseModel):
-    organization_id: UUID
     email: EmailStr
     display_name: str
 
@@ -30,7 +29,7 @@ async def get_me(current_user: AuthUser = Depends(get_current_user)):
 @router.post("/invite")
 async def invite(payload: InviteUserSchema, db: Session = Depends(identity_db_session)):
     svc = IdentityService(db, KeycloakClient())
-    return await svc.invite_user(payload.organization_id, payload.email, payload.display_name)
+    return await svc.invite_user(email= str(payload.email), display_name=payload.display_name)
 
 @router.get("")
 def list_users(db: Session = Depends(identity_db_session)):

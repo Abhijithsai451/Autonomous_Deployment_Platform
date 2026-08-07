@@ -47,7 +47,7 @@ def start_task(id: UUID, payload: Optional[StartTaskSchema] = None, db: Session 
     try:
         return svc.start_task(id, assigned_agent_id=assigned_agent_id)
     except InvalidStateTransitionError as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e))
 
 
 @router.post("/tasks/{id}/complete")
@@ -56,7 +56,7 @@ def complete_task(id: UUID, payload: dict = {}, db: Session = Depends(workflow_d
     try:
         return svc.complete_task(id, output_data=payload)
     except InvalidStateTransitionError as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e))
 
 
 @router.post("/tasks/{id}/fail")
@@ -66,7 +66,7 @@ def fail_task(id: UUID, payload: Optional[FailTaskSchema] = None, db: Session = 
     try:
         return svc.fail_task(id, error_details=error_details)
     except InvalidStateTransitionError as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e))
 
 
 @router.post("/tasks/{id}/retry")
@@ -75,7 +75,7 @@ def retry_task(id: UUID, db: Session = Depends(workflow_db_session)):
     try:
         return svc.retry_task(id)
     except InvalidStateTransitionError as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e))
 
 
 @router.post("/tasks/{id}/cancel")
@@ -84,7 +84,7 @@ def cancel_task(id: UUID, db: Session = Depends(workflow_db_session)):
     try:
         return  svc.cancel_task(id)
     except InvalidStateTransitionError as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e))
 
 
 @router.post("/tasks/{id}/request-approval")
@@ -93,7 +93,7 @@ def request_approval(id: UUID, payload: ApprovalRequestSchema, db: Session = Dep
     try:
         return svc.request_approval(id, required_approvers=payload.approvers, details=payload.details)
     except InvalidStateTransitionError as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e))
 
 
 @router.post("/tasks/{id}/receive-approval")
@@ -102,4 +102,4 @@ def receive_approval(id: UUID, payload: ApprovalReceiveSchema, db: Session = Dep
     try:
         return svc.receive_approval(id, approved_by=payload.approved_by, approval_metadata=payload.metadata)
     except InvalidStateTransitionError as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e))

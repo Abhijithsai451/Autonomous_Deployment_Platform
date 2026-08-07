@@ -11,7 +11,7 @@ from apps.identity.infrastructure.database import identity_db_session
 from apps.identity.infrastructure.keycloak_client import KeycloakClient
 from packages.auth.auth_jwt import get_current_user
 
-router = APIRouter(tags= ["Roles & Permissions"], dependencies=[Depends(get_current_user)])
+router = APIRouter(tags= ["Roles & Permissions"]) #, dependencies=[Depends(get_current_user)])
 
 class CreateRoleSchema(BaseModel):
     organization_id: UUID

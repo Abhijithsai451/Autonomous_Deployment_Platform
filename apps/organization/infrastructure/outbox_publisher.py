@@ -1,4 +1,4 @@
-from apps.organization.domain.domain import OutboxEvent, OutboxStatus
+from apps.organization.domain.outbox import OutboxEvent, OutboxStatus
 from apps.organization.infrastructure.database import org_db_session
 from apps.organization.infrastructure.org_nats_client import org_nats_client
 from packages.messaging.outbox import OutboxPublisher
