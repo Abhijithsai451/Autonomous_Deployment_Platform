@@ -13,14 +13,13 @@ from packages.auth.auth_jwt import get_current_user
 router = APIRouter(prefix="/service-accounts", tags=["Service Accounts"]) #, dependencies=[Depends(get_current_user)])
 
 class CreateSASchema(BaseModel):
-    organization_id: UUID
     client_id: str
     description: str
 
 @router.post("")
 async def create_sa(payload: CreateSASchema, db: Session = Depends(identity_db_session)):
     svc = IdentityService(db, KeycloakClient())
-    return await svc.create_service_account(payload.organization_id, payload.client_id, payload.description)
+    return await svc.create_service_account(payload.client_id, payload.description)
 
 @router.get("")
 def list_sa(db: Session = Depends(identity_db_session)):
