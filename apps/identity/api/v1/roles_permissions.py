@@ -14,14 +14,13 @@ from packages.auth.auth_jwt import get_current_user
 router = APIRouter(tags= ["Roles & Permissions"]) #, dependencies=[Depends(get_current_user)])
 
 class CreateRoleSchema(BaseModel):
-    organization_id: UUID
     name: str
     description: str
 
 @router.post("/roles")
 async def create_role(payload: CreateRoleSchema, db: Session = Depends(identity_db_session)):
     svc = IdentityService(db, KeycloakClient())
-    return await svc.create_role(payload.organization_id, payload.name, payload.description)
+    return await svc.create_role(payload.name, payload.description)
 
 @router.get("/roles")
 def get_roles(db: Session = Depends(identity_db_session)):

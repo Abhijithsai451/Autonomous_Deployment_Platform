@@ -472,7 +472,7 @@ def test_idempotency_and_dlq_routing(db_session):
     assert staged[1] >= staged[2], "Event retry_count should match or exceed max_retries for DLQ escalation"
 
 @pytest.mark.asyncio
-async def test_outbox_publisher_end_to_end(monkeypatch):
+async def test_outbox_publisher_e2e(monkeypatch):
     mock_publish = AsyncMock(return_value=None)
     monkeypatch.setattr(workflow_outbox_publisher.bus, "publish", mock_publish)
     # 2. Create a typed event & insert it into outbox DB as PENDING

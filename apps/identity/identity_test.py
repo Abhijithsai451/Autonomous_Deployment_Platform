@@ -120,7 +120,6 @@ async def test_users_invite(client):
     payload = {
         "email": f"newuser-{uuid.uuid4().hex[:6]}@cortexops.io",
         "role_id": DATA.get("role_id", str(uuid.uuid4())),
-        "organization_id": DATA.get("org_id", str(uuid.uuid4())),
         "display_name": "New User"
     }
     try:
@@ -200,7 +199,6 @@ async def test_roles_get(client):
 async def test_roles_create(client):
     payload = {
         "name": "IntegrationTestRole",
-        "organization_id": str(DATA.get("org_id", uuid.uuid4())),
         "permissions": []
     }
     response = await client.post("/roles", json=payload)
@@ -239,8 +237,6 @@ async def test_service_accounts_create(client):
     payload = {
         "client_id": f"sa-dynamic-client-{uuid.uuid4().hex[:6]}",
         "description": "Dynamic Integration Runner",
-        "org_id": DATA.get("org_id", str(uuid.uuid4())),
-        "organization_id": DATA.get("org_id", str(uuid.uuid4()))
     }
     try:
         response = await client.post("/service-accounts", json=payload)

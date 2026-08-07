@@ -34,7 +34,7 @@ class IdentityService:
         user = User(keycloak_user_id=k_id, email=email, display_name=display_name,
                     status=UserStatus.INVITED)
         self.db.add(user)
-
+        self.db.flush()
         user_created_event = UserInvitedEvent(id = user.id, keycloak_user_id= user.keycloak_user_id).subject
         user_payload = {
             "id": str(user.id),
@@ -72,7 +72,7 @@ class IdentityService:
 
     # --- Roles ---
     async def create_role(self, org_id: UUID, name: str, description: str) -> Role:
-        role = Role(organization_id=org_id, name=name, description=description)
+        role = Role(name=name, description=description)
         self.db.add(role)
         self.db.commit()
         self.db.refresh(role)
@@ -98,8 +98,8 @@ class IdentityService:
                                                    {"user_id": str(user_id), "role_id": str(role_id)})
 
     # --- Service Accounts ---
-    async def create_service_account(self, org_id: UUID, client_id: str, description: str) -> ServiceAccount:
-        sa = ServiceAccount(organization_id=org_id, client_id=client_id, description=description)
+    async def create_service_account(self, client_id: str, description: str) -> ServiceAccount:
+        sa = ServiceAccount(client_id=client_id, description=description)
         self.db.add(sa)
         self.db.commit()
         self.db.refresh(sa)
@@ -110,7 +110,7 @@ class IdentityService:
     async def create_api_key(self, org_id: UUID, name: str, sa_id: UUID = None) -> tuple[ApiKey, str]:
         raw_key = f"cxop_{secrets.token_urlsafe(32)}"
         hashed = hashlib.sha256(raw_key.encode()).hexdigest()
-        key = ApiKey(organization_id=org_id, name=name, service_account_id=sa_id, hashed_key=hashed)
+        key = ApiKey(name=name, service_account_id=sa_id, hashed_key=hashed)
         self.db.add(key)
         self.db.commit()
         await nats.publish("ApiKeyCreated", {"id": str(key.id), "name": key.name})
