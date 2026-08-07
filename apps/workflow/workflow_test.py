@@ -481,13 +481,13 @@ async def test_outbox_publisher_e2e(monkeypatch):
         blueprint_id=uuid4(),
         triggered_by="TEST_USER"
     )
-
+    event_type = event.subject
     db = next(workflow_db_session())
     outbox_entry = OutboxEvent(
         id=str(event.event_id),
         aggregate_type="WORKFLOW_INSTANCE",
         aggregate_id=event.instance_id,
-        event_type=event.event_name,
+        event_type=event_type,
         payload=event.to_payload(),
         status=OutboxStatus.PENDING
     )
@@ -498,7 +498,7 @@ async def test_outbox_publisher_e2e(monkeypatch):
 
     assert processed_count == 1
     mock_publish.assert_called_once_with(
-        event_type="WorkflowStartedEvent",
+        event_type=event_type,
         payload=event.to_payload()
     )
 

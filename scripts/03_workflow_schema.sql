@@ -40,7 +40,7 @@ CREATE TYPE workflow.task_status AS ENUM (
 CREATE TYPE workflow.outbox_status AS ENUM (
     'PENDING',
     'PROCESSING',
-    'PROCESSED',
+    'PUBLISHED',
     'FAILED',
     'DEAD_LETTER'
 );
@@ -217,10 +217,10 @@ SELECT
     seed_status,
     CASE WHEN seed_status = 'FAILED' THEN 5 ELSE 0 END,
     CASE WHEN seed_status = 'FAILED' THEN 'NATS connection error' ELSE NULL END,
-    CASE WHEN seed_status = 'PROCESSED' THEN NOW() ELSE NULL END
+    CASE WHEN seed_status = 'PUBLISHED' THEN NOW() ELSE NULL END
 FROM (
     SELECT id, blueprint_id, status,
-           (ARRAY['PENDING', 'PROCESSED', 'FAILED'])[floor(random() * 3 + 1)]::workflow.outbox_status AS seed_status
+           (ARRAY['PENDING', 'PUBLISHED', 'FAILED'])[floor(random() * 3 + 1)]::workflow.outbox_status AS seed_status
     FROM workflow.workflow_instances
     WHERE random() > 0.4
 ) subquery;
@@ -240,10 +240,10 @@ SELECT
     seed_status,
     CASE WHEN seed_status = 'FAILED' THEN 5 ELSE 0 END,
     CASE WHEN seed_status = 'FAILED' THEN 'NATS connection error' ELSE NULL END,
-    CASE WHEN seed_status = 'PROCESSED' THEN NOW() ELSE NULL END
+    CASE WHEN seed_status = 'PUBLISHED' THEN NOW() ELSE NULL END
 FROM (
     SELECT id, workflow_instance_id, action_type, status,
-           (ARRAY['PENDING', 'PROCESSED', 'FAILED'])[floor(random() * 3 + 1)]::workflow.outbox_status AS seed_status
+           (ARRAY['PENDING', 'PUBLISHED', 'FAILED'])[floor(random() * 3 + 1)]::workflow.outbox_status AS seed_status
     FROM workflow.tasks
     WHERE status = 'COMPLETED'
 ) subquery;
