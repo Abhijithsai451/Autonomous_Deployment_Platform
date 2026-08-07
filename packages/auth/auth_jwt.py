@@ -28,7 +28,9 @@ async def verify_jwt(credentials: HTTPAuthorizationCredentials = Depends(securit
             token,
             signing_key.key,
             algorithms=["RS256"],
-            options={"verify_aud": False}
+            options={"verify_aud": False,
+                     "verify-iss": False
+                     }
         )
     except jwt.ExpiredSignatureError:
         raise HTTPException(

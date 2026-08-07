@@ -503,4 +503,4 @@ async def test_outbox_publisher_end_to_end(monkeypatch):
     )
 
     db.refresh(outbox_entry)
-    assert outbox_entry.status == OutboxStatus.PROCESSED
+    assert outbox_entry.status == OutboxStatus.PUBLISHED

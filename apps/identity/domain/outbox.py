@@ -5,18 +5,19 @@ from uuid import uuid4
 from sqlalchemy import Column, String, Enum, Integer, Text, DateTime
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 
-from apps.organization.infrastructure.base import Base
+from apps.identity.infrastructure.base import Base
+
 
 class OutboxStatus(str, enum.Enum):
     PENDING = "PENDING"
     PROCESSING = "PROCESSING"
-    PROCESSED = "PROCESSED"
+    PUBLISHED = "PUBLISHED"
     FAILED = "FAILED"
     DEAD_LETTER = "DEAD_LETTER"
 
 class OutboxEvent(Base):
     __tablename__ = "outbox_events"
-    __table_args__ = {"schema": "workflow"}
+    __table_args__ = {"schema": "identity"}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     event_type = Column(String(100), nullable=False, index=True)
@@ -24,7 +25,7 @@ class OutboxEvent(Base):
     aggregate_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     payload = Column(JSONB, nullable=False)
     status = Column(
-        Enum(OutboxStatus, name="outbox_status", schema="workflow"),
+        Enum(OutboxStatus, name="outbox_status", schema="identity"),
         default=OutboxStatus.PENDING,
         nullable=False,
         index=True
@@ -35,13 +36,13 @@ class OutboxEvent(Base):
     processed_at = Column(DateTime(timezone=True), nullable=True)
 
     def mark_processed(self) -> None:
-        self.status = OutboxStatus.PROCESSED
+        self.status = OutboxStatus.PUBLISHED
         self.processed_at = datetime.now(timezone.utc)
 
-    def mark_failed(self, error: str) -> None:
+    def mark_failed(self, error: str, max_retries: int = 5) -> None:
         self.retry_count += 1
         self.error_message = error
-        if self.retry_count >= 5:
+        if self.retry_count >= max_retries:
             self.status = OutboxStatus.FAILED
         else:
             self.status = OutboxStatus.PENDING

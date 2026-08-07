@@ -13,7 +13,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp" SCHEMA identity;
 -- ENUMS
 -- ========================================================
 CREATE TYPE identity.user_status AS ENUM ('ACTIVE', 'INVITED', 'DISABLED');
-CREATE TYPE identity.outbox_status AS ENUM ('PENDING', 'PROCESSING', 'PUBLISHED', 'FAILED');
+CREATE TYPE identity.outbox_status AS ENUM ('PENDING', 'PROCESSING', 'PUBLISHED', 'FAILED', 'DEAD_LETTER');
 
 -- ========================================================
 -- TABLES

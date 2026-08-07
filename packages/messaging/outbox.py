@@ -52,7 +52,7 @@ class OutboxPublisher:
                     if hasattr(event, "mark_processed"):
                         event.mark_processed()
                     else:
-                        event.status = self.status_enum.PROCESSED
+                        event.status = self.status_enum.PUBLISHED
 
                     processed_count += 1
 
@@ -69,7 +69,8 @@ class OutboxPublisher:
                             event.status = self.status_enum.PENDING
 
                     if event.status in (self.status_enum.DEAD_LETTER, self.status_enum.FAILED):
-                        logger.error(f"Outbox event {event.id} reached max retries. Sent to DLQ: {exc}")
+                        logger.error(f"Outbox event {event.id} reached max retries. Sent to DLQ: {exc}",exc_info=True)
+
                         try:
                             await self.bus.publish(
                                 event_type="dlq.events",

@@ -10,7 +10,7 @@ from apps.workflow.infrastructure.base import Base
 class OutboxStatus(str, enum.Enum):
     PENDING = "PENDING"
     PROCESSING = "PROCESSING"
-    PROCESSED = "PROCESSED"
+    PUBLISHED = "PUBLISHED"
     FAILED = "FAILED"
     DEAD_LETTER = "DEAD_LETTER"
 
@@ -35,13 +35,13 @@ class OutboxEvent(Base):
     processed_at = Column(DateTime(timezone=True), nullable=True)
 
     def mark_processed(self) -> None:
-        self.status = OutboxStatus.PROCESSED
+        self.status = OutboxStatus.PUBLISHED
         self.processed_at = datetime.now(timezone.utc)
 
-    def mark_failed(self, error: str) -> None:
+    def mark_failed(self, error: str, max_retries: int = 5) -> None:
         self.retry_count += 1
         self.error_message = error
-        if self.retry_count >= 5:
+        if self.retry_count >= max_retries:
             self.status = OutboxStatus.FAILED
         else:
             self.status = OutboxStatus.PENDING

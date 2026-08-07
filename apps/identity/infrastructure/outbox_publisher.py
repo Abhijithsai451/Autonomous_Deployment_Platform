@@ -1,4 +1,4 @@
-from apps.identity.domain.domain import OutboxEvent, OutboxStatus
+from apps.identity.domain.outbox import OutboxEvent, OutboxStatus
 from apps.identity.infrastructure.database import identity_db_session
 from apps.identity.infrastructure.identity_nats_client import identity_nats_client
 from packages.messaging.outbox import OutboxPublisher
