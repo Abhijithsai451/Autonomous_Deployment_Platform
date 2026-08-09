@@ -5,9 +5,10 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from apps.identity.domain.api_key import ApiKey
+from apps.identity.domain.events.role_events import RoleCreatedEvent, RoleAssignedToUserEvent
 from apps.identity.domain.outbox import OutboxEvent, OutboxStatus
 from apps.identity.domain.events.user_events import *
-from apps.identity.domain.role import Role
+from apps.identity.domain.role import *
 from apps.identity.domain.service_account import ServiceAccount
 from apps.identity.domain.user import UserStatus, User
 from apps.identity.infrastructure.identity_nats_client import identity_nats_client as nats
@@ -52,28 +53,66 @@ class IdentityService:
 
     async def update_user_status(self, user_id: UUID, status: str) -> User:
         user = self.db.query(User).filter(User.id == user_id).first()
+
         if user:
             user.status = UserStatus(status)
             if user.status == UserStatus.ACTIVE:
                 self.keycloak.enable_external_user(str(user.keycloak_user_id))
-                await nats.publish("UserActivated", {"id": str(user.id)})
+                user_activated_event = UserActivatedEvent(id=user.id, keycloak_user_id=user.keycloak_user_id).subject
+                payload ={
+                    "id": str(user.id),
+                    "keycloak_user_id": str(user.keycloak_user_id),
+                    "email": user.email,
+                    "display_name": user.display_name,
+                    "status": user.status.value,
+                }
+                self._log_event(aggregate_id=user_id, aggregate_type="USER",
+                                event_type=user_activated_event, payload=payload)
             elif user.status == UserStatus.DISABLED:
                 self.keycloak.disable_external_user(str(user.keycloak_user_id))
-                await nats.publish("UserDisabled", {"id": str(user.id)})
+                user_disabled_event = UserDisabledEvent(id=user.id, keycloak_user_id=user.keycloak_user_id).subject
+                payload = {
+                    "id": str(user.id),
+                    "keycloak_user_id": str(user.keycloak_user_id),
+                    "email": user.email,
+                    "display_name": user.display_name,
+                    "status": user.status.value,
+                }
+                self._log_event(aggregate_id=user_id, aggregate_type="USER",
+                                event_type=user_disabled_event, payload=payload)
             self.db.commit()
         return user
 
     async def delete_user(self, user_id: UUID):
         user = self.db.query(User).filter(User.id == user_id).first()
-        if user:
-            self.keycloak.delete_external_user(str(user.keycloak_user_id))
-            self.db.delete(user)
-            self.db.commit()
+        user.status = UserStatus.DISABLED
+        self.keycloak.disable_external_user(str(user.keycloak_user_id))
+        user_disabled_event = UserDisabledEvent(id=user.id, keycloak_user_id=user.keycloak_user_id).subject
+        payload = {
+            "id": str(user.id),
+            "keycloak_user_id": str(user.keycloak_user_id),
+            "email": user.email,
+            "display_name": user.display_name,
+            "status": user.status.value,
+        }
+        self._log_event(aggregate_id=user_id, aggregate_type="USER",
+                        event_type=user_disabled_event, payload=payload)
+        self.db.commit()
 
     # --- Roles ---
     async def create_role(self, org_id: UUID, name: str, description: str) -> Role:
         role = Role(name=name, description=description)
         self.db.add(role)
+        role_created_event = RoleAssignedToUserEvent(id=role.id,).subject
+        role_payload = {
+            "id": str(role.id),
+            "name": role.name,
+            "description": role.description,
+            "system_role":role.system_role,
+        }
+        self._log_event(aggregate_id=role.id, aggregate_type="ROLE",
+                        event_type=role_created_event, payload=role_payload)
+
         self.db.commit()
         self.db.refresh(role)
         await nats.publish("RoleCreated", {"id": str(role.id), "name": role.name})
