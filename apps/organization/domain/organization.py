@@ -26,6 +26,7 @@ class Organization(Base):
     name = Column(String(255), nullable = False)
     slug = Column(String(100), unique=True, index=True, nullable=False)
     status = Column(Enum(OrgStatus, name="org_status",schema="organization"), default = OrgStatus.ACTIVE, nullable=False)
+    plan = Column(Enum(OrgPlan, name = "org_plan", schema = "organization"), default = OrgPlan.FREE, nullable = False)
     general_settings = Column(JSON, default={}, nullable = False)
     security_settings = Column(JSON, default={}, nullable=False)
     llm_settings = Column(JSON, default={}, nullable=False)
