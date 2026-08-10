@@ -7,7 +7,6 @@ from apps.organization.domain.department import Department, DepartmentStatus
 from apps.organization.domain.events.department_events import DepartmentCreatedEvent, DepartmentUpdatedEvent, \
     DepartmentDeletedEvent, DepartmentArchivedEvent, DepartmentNotFoundEvent
 from apps.organization.domain.outbox import OutboxEvent, OutboxStatus
-from apps.organization.infrastructure.org_nats_client import org_nats_client as nats
 
 
 class DepartmentService:
