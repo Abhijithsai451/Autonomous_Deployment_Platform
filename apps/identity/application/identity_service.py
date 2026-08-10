@@ -5,7 +5,9 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from apps.identity.domain.api_key import ApiKey
-from apps.identity.domain.events.role_events import RoleCreatedEvent, RoleAssignedToUserEvent
+from apps.identity.domain.events.api_events import APIKeyCreatedEvent, APIKeyRevokedEvent
+from apps.identity.domain.events.role_events import RoleCreatedEvent, RoleAssignedToUserEvent, RoleRemovedFromUserEvent
+from apps.identity.domain.events.service_account_events import ServiceAccountCreatedEvent
 from apps.identity.domain.outbox import OutboxEvent, OutboxStatus
 from apps.identity.domain.events.user_events import *
 from apps.identity.domain.role import *
@@ -100,10 +102,10 @@ class IdentityService:
         self.db.commit()
 
     # --- Roles ---
-    async def create_role(self, org_id: UUID, name: str, description: str) -> Role:
+    async def create_role(self, name: str, description: str) -> Role:
         role = Role(name=name, description=description)
         self.db.add(role)
-        role_created_event = RoleAssignedToUserEvent(id=role.id,).subject
+        role_created_event = RoleCreatedEvent(id=role.id,).subject
         role_payload = {
             "id": str(role.id),
             "name": role.name,
@@ -123,41 +125,78 @@ class IdentityService:
         role = self.db.query(Role).filter(Role.id == role_id).first()
         if user and role:
             user.roles.append(role)
+            role_assigned_event = RoleAssignedToUserEvent(id=role.id,user_id =user.id ).subject
+            payload = {
+                "id": str(role.id),
+                "user_id": str(user.id)
+            }
+            self._log_event(aggregate_id=role.id, aggregate_type="USER_ROLES",
+                            event_type=role_assigned_event, payload=payload)
             self.db.commit()
-            await nats.publish("RoleAssignedToUser",
-                                                   {"user_id": str(user_id), "role_id": str(role_id)})
+            self.db.refresh(role)
+            self.db.refresh(user)
+
 
     async def remove_role(self, user_id: UUID, role_id: UUID):
         user = self.db.query(User).filter(User.id == user_id).first()
         role = self.db.query(Role).filter(Role.id == role_id).first()
         if user and role in user.roles:
             user.roles.remove(role)
+            role_removed_event = RoleRemovedFromUserEvent(id=role.id, user_id=user.id).subject
+            payload = {
+                "id": str(role.id),
+                "user_id": str(user.id)
+            }
+            self._log_event(aggregate_id=role.id, aggregate_type="USER_ROLES",
+                            event_type=role_removed_event, payload=payload)
             self.db.commit()
-            await nats.publish("RoleRemovedFromUser",
-                                                   {"user_id": str(user_id), "role_id": str(role_id)})
+
 
     # --- Service Accounts ---
     async def create_service_account(self, client_id: str, description: str) -> ServiceAccount:
         sa = ServiceAccount(client_id=client_id, description=description)
         self.db.add(sa)
+        self.db.flush()
+        sa_created_event = ServiceAccountCreatedEvent(id=sa.id, client_id = client_id).subject
+        payload= {
+            "id": str(sa.id),
+            "client_id": str(client_id),
+            "description": sa.description,
+            "created_id": str(sa.created_at)
+        }
+        self._log_event(aggregate_id=sa.id,aggregate_type="ServiceAccount",event_type=sa_created_event, payload = payload)
         self.db.commit()
         self.db.refresh(sa)
-        await nats.publish("ServiceAccountCreated", {"id": str(sa.id), "client_id": sa.client_id})
+
         return sa
 
     # --- API Keys ---
-    async def create_api_key(self, org_id: UUID, name: str, sa_id: UUID = None) -> tuple[ApiKey, str]:
+    async def create_api_key(self, name: str, sa_id: UUID = None) -> tuple[ApiKey, str]:
         raw_key = f"cxop_{secrets.token_urlsafe(32)}"
         hashed = hashlib.sha256(raw_key.encode()).hexdigest()
         key = ApiKey(name=name, service_account_id=sa_id, hashed_key=hashed)
+        key_created_event = APIKeyCreatedEvent(id = key.id)
+        payload = {
+            "id": str(key.id),
+            "service_account_id":str(sa_id),
+            "name":key.name,
+            "created_at": key.created_at
+        }
+        self._log_event(aggregate_id=key.id,aggregate_type="ApiKey",event_type=key_created_event, payload = payload)
         self.db.add(key)
         self.db.commit()
-        await nats.publish("ApiKeyCreated", {"id": str(key.id), "name": key.name})
         return key, raw_key
 
     async def revoke_api_key(self, key_id: UUID):
         key = self.db.query(ApiKey).filter(ApiKey.id == key_id).first()
         if key:
             key.revoked_at = datetime.utcnow()
+            key_revoked_event = APIKeyRevokedEvent(id=key.id)
+            payload = {
+                "id": str(key.id),
+                "service_account_id": str(key.service_account_id),
+                "name": key.name,
+                "revoked_at": key.revoked_at
+            }
+            self._log_event(aggregate_id=key.id, aggregate_type="ApiKey", event_type=key_revoked_event,payload = payload)
             self.db.commit()
-            await nats.publish("ApiKeyRevoked", {"id": str(key_id)})
