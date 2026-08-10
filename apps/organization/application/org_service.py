@@ -7,7 +7,6 @@ from apps.organization.domain.events.organization_events import OrganizationCrea
     OrganizationStatusUpdatedEvent, OrganizationNotFoundEvent, OrganizationSuspendedEvent
 from apps.organization.domain.organization import Organization, OrgStatus
 from apps.organization.domain.outbox import OutboxEvent, OutboxStatus
-from apps.organization.infrastructure.org_nats_client import org_nats_client as nats
 
 
 class OrganizationService:
