@@ -11,26 +11,37 @@ def register_event(cls: Type[BaseEvent])-> Type[BaseEvent]:
 
 
 class TaskLifeCycleEvent(BaseEvent):
-    instance_id: UUID
     task_id: UUID
-    action_type: str
-    input_data: Dict[str, Any] = {}
-
 
 class TaskCreatedEvent(TaskLifeCycleEvent):
+    instance_id: UUID
+    action_type: str
     input_data: Dict[str, Any] = {}
     @property
     def subject(self)->str:
         return "workflow.events.task.created"
 
+class TaskReadyEvent(TaskLifeCycleEvent):
+    instance_id: UUID
+    action_type: str
+    input_data: Dict[str, Any] = {}
+    @property
+    def subject(self)-> str:
+        return "workflow.events.task.ready"
 
 class TaskStartedEvent(TaskLifeCycleEvent):
+    instance_id: UUID
+    action_type: str
+    input_data: Dict[str, Any] = {}
     @property
     def subject(self)->str:
         return "workflow.events.task.started"
 
 
 class TaskCompletedEvent(TaskLifeCycleEvent):
+    instance_id: UUID
+    action_type: str
+    input_data: Dict[str, Any] = {}
     result: Dict[str, Any] = {}
     @property
     def subject(self)->str:
@@ -38,9 +49,32 @@ class TaskCompletedEvent(TaskLifeCycleEvent):
 
 
 class TaskFailedEvent(TaskLifeCycleEvent):
+    instance_id: UUID
+    action_type: str
+    input_data: Dict[str, Any] = {}
     error_message: str
     @property
     def subject(self)->str:
         return "workflow.events.task.failed"
 
+class TaskRetryEvent(TaskLifeCycleEvent):
+    instance_id: UUID
+    action_type: str
+    input_data: Dict[str, Any] = {}
+    @property
+    def subject(self)-> str:
+        return "workflow.events.task.retry"
+
+class TaskCancelEvent(TaskLifeCycleEvent):
+    instance_id: UUID
+    action_type: str
+    input_data: Dict[str, Any] = {}
+    @property
+    def subject(self)-> str:
+        return "workflow.events.task.cancel"
+
+class TaskNotFoundEvent(TaskLifeCycleEvent):
+    @property
+    def subject(self)-> str:
+        return "workflow.events.task.not_found"
 

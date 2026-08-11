@@ -27,7 +27,7 @@ class ApprovalRequestedEvent(ApprovalLifecycleEvent):
 
 class ApprovalReceivedEvent(ApprovalLifecycleEvent):
     responded_by: str
-    decision: str  # "GRANTED" or "REJECTED"
+    decision: str
 
     @property
     def subject(self) -> str:

@@ -11,18 +11,15 @@ class BlueprintService:
     def __init__(self, db: Session):
         self.db = db
 
-    def _log_event(self, blueprint_id: UUID, event_type: str, payload: dict) -> OutboxEvent:
-
-        outbox_entry = OutboxEvent(event_type=f"workflow.events.{event_type}",aggregate_type="WorkflowBlueprint",
-            aggregate_id=blueprint_id,
-            payload={
-                "blueprint_id": str(blueprint_id),
-                **payload
-            },
+    def _log_event(self, aggregate_id: UUID, aggregate_type: str, event_type: str, payload: dict):
+        outbox_entry = OutboxEvent(
+            aggregate_id=aggregate_id,
+            aggregate_type=aggregate_type,
+            event_type=event_type,
+            payload=payload,
             status=OutboxStatus.PENDING
         )
         self.db.add(outbox_entry)
-        return outbox_entry
 
     def create_blueprint(self, name: str, definition: dict, description: Optional[str] = None,
         version: int = 1 ) -> WorkflowBlueprint:
