@@ -1,16 +1,13 @@
-import os
 import uuid
+import nats
 import pytest
 from keycloak import KeycloakAdmin
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
-from apps.identity.infrastructure.base import Base
+from sqlalchemy import  text
 from apps.identity.identity_main import app
 from apps.identity.infrastructure.database import db_client
-from infrastructure.nats.nats_client import EventBus
 from apps.identity.config.identity_settings import identity_settings as settings
-import nats
+from apps.identity.infrastructure.identity_nats_client import identity_nats_client as nats_client
 
 DATA = {}
 
@@ -53,9 +50,6 @@ def db_session():
     transaction = connection.begin()
 
     session = db_client.SessionLocal(bind=connection)
-    org = session.execute(text("SELECT id FROM identity.organizations LIMIT 1")).fetchone()
-    if org:
-        DATA["org_id"] = str(org[0])
     user = session.execute(text("SELECT id FROM identity.users LIMIT 1")).fetchone()
     if user:
         DATA["user_id"] = str(user[0])
@@ -73,13 +67,10 @@ def db_session():
 
 @pytest.fixture
 async def client():
-    EventBus._publisher = None
-    EventBus._subscriber = None
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         async with app.router.lifespan_context(app):
             yield ac
-    await EventBus.shutdown()
 
 
 @pytest.mark.anyio
@@ -129,7 +120,6 @@ async def test_users_invite(client):
     payload = {
         "email": f"newuser-{uuid.uuid4().hex[:6]}@cortexops.io",
         "role_id": DATA.get("role_id", str(uuid.uuid4())),
-        "organization_id": DATA.get("org_id", str(uuid.uuid4())),
         "display_name": "New User"
     }
     try:
@@ -209,7 +199,6 @@ async def test_roles_get(client):
 async def test_roles_create(client):
     payload = {
         "name": "IntegrationTestRole",
-        "organization_id": str(DATA.get("org_id", uuid.uuid4())),
         "permissions": []
     }
     response = await client.post("/roles", json=payload)
@@ -248,8 +237,6 @@ async def test_service_accounts_create(client):
     payload = {
         "client_id": f"sa-dynamic-client-{uuid.uuid4().hex[:6]}",
         "description": "Dynamic Integration Runner",
-        "org_id": DATA.get("org_id", str(uuid.uuid4())),
-        "organization_id": DATA.get("org_id", str(uuid.uuid4()))
     }
     try:
         response = await client.post("/service-accounts", json=payload)
@@ -283,7 +270,7 @@ async def test_api_keys_list(client):
 @pytest.mark.anyio
 async def test_api_keys_create(client):
     payload = {
-        "organization_id": str(DATA.get("org_id", uuid.uuid4())),
+        "user_id": str(DATA.get("user_id", uuid.uuid4())),
         "service_account_id": str(DATA.get("service_account_id", uuid.uuid4())),
         "hashed_key": "raw_test_hashed_string"
     }
@@ -300,7 +287,7 @@ async def test_api_keys_revoke(client):
 
 @pytest.mark.anyio
 async def test_event_bus_publish(client):
-    await EventBus.publish(
+    await nats_client.publish(
         event_type="UserInvited",
         payload={"id": "test-user-id", "email": "test@cortexops.io"},
     )

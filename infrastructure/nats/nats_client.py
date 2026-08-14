@@ -1,77 +1,38 @@
-import uuid
-import logging
-from enum import Enum
-from typing import Dict, Any, Callable, Awaitable
 
-from packages.config.settings import common_settings as settings
-from packages.messaging.publisher import Publisher
-from packages.messaging.subscriber import Subscriber
+from typing import  List, Optional
 
-logger = logging.getLogger("cortexops_sdk.messaging")
+import nats
+from nats.js import JetStreamContext
 
-class EventBus:
-    _publisher = None
-    _subscriber = None
+from packages.logging.structured_logs import struc_logger as logger
 
-    @classmethod
-    async def initialize(cls):
-        """Initializes both Publisher and Subscriber instances across the app lifecycle."""
-        if cls._publisher is None:
-            cls._publisher = Publisher(nats_url=settings.NATS_URL)
-            await cls._publisher.connect()
+class NatsClient:
+    """Establishes the NATS Client connection and manages the JetStream context lifecycle."""
+    def __init__(self, nats_url: str):
+        self.nats_url = nats_url
+        self.nc: Optional[nats.NATS]= None
+        self.js : Optional[JetStreamContext] = None
 
-            # Ensure the durable core stream exists for identity domain events
-            try:
-                await cls._publisher.js.add_stream(name="identity_events", subjects=["identity.*"])
-            except Exception:
-                pass
+    async def connect(self)-> None:
+        if self.nc is None or not self.nc.is_connected:
+            self.nc = await nats.connect(self.nats_url)
+            self.js = self.nc.jetstream()
+            logger.info(f"Successfully connected to NATS at {self.nats_url}")
 
-        if cls._subscriber is None:
-            cls._subscriber = Subscriber(nats_url=settings.NATS_URL)
-            await cls._subscriber.connect()
+    async def ensure_stream(self, stream_name: str, subjects: List[str])-> None:
+        if not self.js:
+            await self.connect()
+        try:
+            await self.js.add_stream(name = stream_name, subjects=subjects)
+            logger.info(f"JetStream stream '{stream_name}' ensured for subjects {subjects}")
+        except Exception as err:
+            logger.debug(f"Stream '{stream_name}' notice/already exists: {err}")
 
-    @classmethod
-    async def publish(cls, event_type: Any, payload: Dict[str, Any]):
-        """Wraps the application service event into your exact telemetry-tracked publisher."""
-        if not cls._publisher:
-            await cls.initialize()
-        if isinstance(event_type, Enum):
-            event_name = event_type.name
-        else:
-            event_name = str(event_type)
+    async def close(self) -> None:
+        if self.nc and not self.nc.is_closed:
+            await self.nc.drain()
+            await self.nc.close()
+            self.nc = None
+            self.js = None
+            logger.info("NATS connection drained and closed.")
 
-        subject = f"identity.{event_name.lower()}"
-        idempotency_key = str(uuid.uuid4())
-
-        await cls._publisher.publish_event(
-            subject=subject,
-            event_type=event_name,
-            payload=payload,
-            idempotency_key=idempotency_key
-        )
-
-    @classmethod
-    async def register_listener(
-            cls,
-            stream: str,
-            subject: str,
-            durable_name: str,
-            handler: Callable[[dict, dict], Awaitable[None]]
-    ):
-        """Exposes the EventSubscriber configuration for listening to domestic/foreign domains."""
-        if not cls._subscriber:
-            await cls.initialize()
-        await cls._subscriber.subscribe(
-            stream=stream,
-            subject=subject,
-            durable_name=durable_name,
-            handler=handler
-        )
-
-    @classmethod
-    async def shutdown(cls):
-        """Gracefully tears down downstream network channels."""
-        if cls._publisher:
-            await cls._publisher.close()
-        if cls._subscriber:
-            await cls._subscriber.close()
