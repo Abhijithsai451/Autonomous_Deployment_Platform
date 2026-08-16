@@ -5,6 +5,10 @@ from uuid import UUID
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from apps.workflow.domain.events.instance_events import WorkflowInstanceCreated, WorkflowInstanceNotFound, \
+    WorkflowStartedEvent, WorkflowCompletedEvent, WorkflowFailedEvent, WorkflowPausedEvent, WorkflowResumedEvent, \
+    WorkflowCancelledEvent, WorkflowRetryEvent, WorkflowTimedOutEvent, WorkflowSignalInstanceEvent
+from apps.workflow.domain.events.tasks_events import TaskReadyEvent
 from apps.workflow.domain.outbox import OutboxEvent, OutboxStatus
 from apps.workflow.domain.tasks import Task, TaskStatus
 from apps.workflow.domain.workflow_event import WorkflowEvent
@@ -15,21 +19,15 @@ class InstanceService:
     def __init__(self, db: Session):
         self.db = db
 
-    def _log_event(self, instance_id: UUID, event_type: str, payload: dict) -> WorkflowEvent:
-        event = WorkflowEvent(
-            workflow_instance_id=instance_id,
-            task_id=None,
-            event_type=f"workflow.events.{event_type}",
+    def _log_event(self, aggregate_id: UUID, aggregate_type: str, event_type: str, payload: dict):
+        outbox_entry = OutboxEvent(
+            aggregate_id=aggregate_id,
+            aggregate_type=aggregate_type,
+            event_type=event_type,
             payload=payload,
-        )
-        self.db.add(event)
-
-        outbox_entry = OutboxEvent(event_type=f"workflow.events.{event_type}",aggregate_type="WorkflowInstance",
-            aggregate_id=instance_id,payload={"instance_id": str(instance_id),**payload},
             status=OutboxStatus.PENDING
         )
         self.db.add(outbox_entry)
-        return event
 
     def create_instance(self,blueprint_id: UUID,input_data: Optional[dict] = None,triggered_by: Optional[str] = "SYSTEM",
             started_by: Optional[str] = None) -> WorkflowInstance:
@@ -44,9 +42,15 @@ class InstanceService:
         self.db.flush()
 
         self._log_event(
-            instance_id=instance.id,
-            event_type="WorkflowCreated",
-            payload={"blueprint_id": str(blueprint_id), "triggered_by": triggered_by}
+            aggregate_id=instance.id,
+            aggregate_type = "INSTANCE",
+            event_type= WorkflowInstanceCreated(instance_id = instance.id, blueprint_id= instance.blueprint_id).subject,
+            payload={
+                "id": str(instance.id),
+                "blueprint_id": str(blueprint_id),
+                "triggered_by": triggered_by,
+                "status": instance.status.value,
+            }
         )
 
         self.db.commit()
@@ -56,6 +60,15 @@ class InstanceService:
     def start_instance(self, instance_id: UUID) -> WorkflowInstance:
         instance = self.db.get(WorkflowInstance, instance_id)
         if not instance:
+            self._log_event(
+                aggregate_id=instance_id,
+                aggregate_type="INSTANCE",
+                event_type=WorkflowInstanceNotFound(instance_id=instance_id).subject,
+                payload={
+                    "id": str(instance_id),
+                    "error": f"Instance with the id {instance_id} not found",
+                }
+            )
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"WorkflowInstance with ID {instance_id} not found."
@@ -65,10 +78,15 @@ class InstanceService:
         instance.started_at = datetime.now(timezone.utc)
 
         self._log_event(
-            instance_id=instance.id,
-            event_type="WorkflowStarted",
-            payload={"blueprint_id": str(instance.blueprint_id)}
-        )
+            aggregate_id= instance.id,
+            aggregate_type="INSTANCE",
+            event_type=WorkflowStartedEvent(instance_id=instance.id, blueprint_id=instance.blueprint_id).subject,
+            payload={
+                "id": str(instance.id),
+                "blueprint_id": str(instance.blueprint_id),
+                "triggered_by": instance.triggered_by,
+                "status": instance.status.value,
+            })
 
         root_tasks = (
             self.db.query(Task)
@@ -83,8 +101,13 @@ class InstanceService:
         for task in root_tasks:
             task.status = TaskStatus.READY
             self._log_event(
-                instance_id=instance.id,
-                event_type="TaskReady",
+                aggregate_id=instance.id,
+                aggregate_type="Task",
+                event_type=TaskReadyEvent(task_id=task.id,
+                                 instance_id=task.workflow_instance_id,
+                                 action_type=task.action_type,
+                                 input_data=task.input_data
+                                 ).subject,
                 payload={"task_id": str(task.id), "action_type": task.action_type}
             )
 
@@ -95,6 +118,15 @@ class InstanceService:
     def complete_instance(self, instance_id: UUID, output_data: Optional[dict] = None) -> WorkflowInstance:
         instance = self.db.get(WorkflowInstance, instance_id)
         if not instance:
+            self._log_event(
+                aggregate_id=instance_id,
+                aggregate_type="INSTANCE",
+                event_type=WorkflowInstanceNotFound(instance_id=instance_id).subject,
+                payload={
+                    "id": str(instance_id),
+                    "error": f"Instance with the id {instance_id} not found",
+                })
+
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"WorkflowInstance with ID {instance_id} not found."
@@ -106,9 +138,17 @@ class InstanceService:
             instance.output_data = output_data
 
         self._log_event(
-            instance_id=instance.id,
-            event_type="WorkflowCompleted",
-            payload={"status": instance.status.value}
+            aggregate_id=instance.id,
+            aggregate_type="INSTANCE",
+            event_type=WorkflowCompletedEvent(instance_id= instance.id, blueprint_id= instance.blueprint_id,
+                                              output_data=instance.output_data).subject,
+            payload={
+                "id": str(instance_id),
+                "blueprint_id": str(instance.blueprint_id),
+                "status": instance.status.value,
+                "completed_at": str(instance.completed_at),
+                "output_data": str(instance.output_data)
+            }
         )
 
         self.db.commit()
@@ -118,6 +158,14 @@ class InstanceService:
     def fail_instance(self, instance_id: UUID, error_details: Optional[dict] = None) -> WorkflowInstance:
         instance = self.db.get(WorkflowInstance, instance_id)
         if not instance:
+            self._log_event(
+                aggregate_id=instance_id,
+                aggregate_type="INSTANCE",
+                event_type=WorkflowInstanceNotFound(instance_id=instance_id).subject,
+                payload={
+                    "id": str(instance_id),
+                    "error": f"Instance with the id {instance_id} not found",
+                })
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"WorkflowInstance with ID {instance_id} not found."
@@ -129,9 +177,15 @@ class InstanceService:
             instance.error_details = error_details
 
         self._log_event(
-            instance_id=instance.id,
-            event_type="WorkflowFailed",
-            payload={"status": instance.status.value, "error": error_details}
+            aggregate_id=instance.id,
+            aggregate_type="INSTANCE",
+            event_type=WorkflowFailedEvent(instance_id=instance.id, blueprint_id=instance.blueprint_id,
+                                              error_message=instance.error_details).subject,
+            payload={
+                "id": str(instance_id),
+                "blueprint_id": str(instance.blueprint_id),
+                "error_message": str(instance.error_details)
+            }
         )
 
         self.db.commit()
@@ -141,6 +195,14 @@ class InstanceService:
     def get_instance_by_id(self, instance_id: UUID) -> WorkflowInstance:
         instance = self.db.get(WorkflowInstance, instance_id)
         if not instance:
+            self._log_event(
+                aggregate_id=instance_id,
+                aggregate_type="INSTANCE",
+                event_type=WorkflowInstanceNotFound(instance_id=instance_id).subject,
+                payload={
+                    "id": str(instance_id),
+                    "error": f"Instance with the id {instance_id} not found",
+                })
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"WorkflowInstance with ID {instance_id} not found."
@@ -196,7 +258,16 @@ class InstanceService:
     def pause_instance(self, instance_id: UUID) -> WorkflowInstance:
         instance = self.get_instance_by_id(instance_id)
         instance.status = WorkflowStatus.PAUSED
-        self._log_event(instance.id, "WorkflowPaused", {})
+        self._log_event(
+            aggregate_id=instance.id,
+            aggregate_type="INSTANCE",
+            event_type=WorkflowPausedEvent(instance_id=instance.id, blueprint_id=instance.blueprint_id).subject,
+            payload={
+                "id": str(instance_id),
+                "blueprint_id": str(instance.blueprint_id),
+                "status": instance.status.value,
+            }
+        )
         self.db.commit()
         self.db.refresh(instance)
         return instance
@@ -204,7 +275,16 @@ class InstanceService:
     def resume_instance(self, instance_id: UUID) -> WorkflowInstance:
         instance = self.get_instance_by_id(instance_id)
         instance.status = WorkflowStatus.RUNNING
-        self._log_event(instance.id, "WorkflowResumed", {})
+        self._log_event(
+            aggregate_id=instance.id,
+            aggregate_type="INSTANCE",
+            event_type=WorkflowResumedEvent(instance_id=instance.id, blueprint_id=instance.blueprint_id).subject,
+            payload={
+                "id": str(instance_id),
+                "blueprint_id": str(instance.blueprint_id),
+                "status": instance.status.value,
+            }
+        )
         self.db.commit()
         self.db.refresh(instance)
         return instance
@@ -213,7 +293,18 @@ class InstanceService:
         instance = self.get_instance_by_id(instance_id)
         instance.status = WorkflowStatus.CANCELLED
         instance.completed_at = datetime.now(timezone.utc)
-        self._log_event(instance.id, "WorkflowCancelled", {"reason": reason})
+        self._log_event(
+            aggregate_id=instance.id,
+            aggregate_type="INSTANCE",
+            event_type=WorkflowCancelledEvent(instance_id=instance.id, blueprint_id=instance.blueprint_id,
+                                              cancelled_by=instance.triggered_by).subject,
+            payload={
+                "id": str(instance_id),
+                "blueprint_id": str(instance.blueprint_id),
+                "status": instance.status.value,
+                "cancelled_by": instance.triggered_by
+            }
+        )
         self.db.commit()
         self.db.refresh(instance)
         return instance
@@ -221,7 +312,18 @@ class InstanceService:
     def retry_instance(self, instance_id: UUID) -> WorkflowInstance:
         instance = self.get_instance_by_id(instance_id)
         instance.status = WorkflowStatus.RUNNING
-        self._log_event(instance.id, "WorkflowRetried", {})
+        self._log_event(
+            aggregate_id=instance.id,
+            aggregate_type="INSTANCE",
+            event_type=WorkflowRetryEvent(instance_id=instance.id, blueprint_id=instance.blueprint_id,
+                                              triggered_by=instance.triggered_by).subject,
+            payload={
+                "id": str(instance_id),
+                "blueprint_id": str(instance.blueprint_id),
+                "status": instance.status.value,
+                "triggered_by": instance.triggered_by
+            }
+        )
         self.db.commit()
         self.db.refresh(instance)
         return instance
@@ -230,14 +332,33 @@ class InstanceService:
         instance = self.get_instance_by_id(instance_id)
         instance.status = WorkflowStatus.FAILED
         instance.completed_at = datetime.now(timezone.utc)
-        self._log_event(instance.id, "WorkflowTimedOut", {"reason": reason})
+        self._log_event(
+            aggregate_id=instance.id,
+            aggregate_type="INSTANCE",
+            event_type=WorkflowTimedOutEvent(instance_id=instance.id, blueprint_id=instance.blueprint_id,
+                                          timeout_seconds=10).subject,
+            payload={
+                "id": str(instance_id),
+                "blueprint_id": str(instance.blueprint_id),
+                "status": instance.status.value,
+            }
+        )
         self.db.commit()
         self.db.refresh(instance)
         return instance
 
     def signal_instance(self, instance_id: UUID, signal_name: str, payload: dict = None) -> WorkflowInstance:
         instance = self.get_instance_by_id(instance_id)
-        self._log_event(instance.id, f"SignalReceived.{signal_name}", payload or {})
+        self._log_event(
+            aggregate_id=instance.id,
+            aggregate_type="INSTANCE",
+            event_type=WorkflowSignalInstanceEvent(instance_id=instance.id, blueprint_id=instance.blueprint_id).subject,
+            payload={
+                "id": str(instance_id),
+                "blueprint_id": str(instance.blueprint_id),
+                "status": instance.status.value,
+            }
+        )
         self.db.commit()
         self.db.refresh(instance)
         return instance
