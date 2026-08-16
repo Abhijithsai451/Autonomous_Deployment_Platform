@@ -1,32 +1,23 @@
+import asyncio
 from apps.identity.infrastructure.identity_nats_client import identity_nats_client as nats
+from apps.identity.infrastructure.outbox_publisher import IdentityOutboxPublisher
 from apps.identity.infrastructure.structured_logs import struct_logger as logger
-from packages.logging.structured_logs import StructuredLogger
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from apps.identity.api.v1 import auth, organizations, users, roles_permissions, service_accounts, api_keys
+from apps.identity.api.v1 import auth, users, roles_permissions, service_accounts, api_keys
 
-log_manager = StructuredLogger(
-    service_name="cortexops-identity",
-    level= "INFO",
-    initial_context = {"env": "production"}
-)
-
-async def identity_logging_handler(payload: dict, metadata: dict):
-    logger.info(f"Received event tracking hook: {metadata.get('event_type')} - ID: {payload.get('id')}")
+identity_publisher = IdentityOutboxPublisher(poll_interval_seconds=0.01, batch_size=50)
 
 @asynccontextmanager
 async def identity_lifespan(app: FastAPI):
     await nats.initialize()
     logger.info("NATS Messaging Core successfully initialized.")
 
-    await nats.register_listener(
-         subject="UserCreated",
-         durable_name="identity-user-created-worker",
-         handler=identity_logging_handler
-     )
-
+    task_publisher = asyncio.create_task(identity_publisher.start())
     yield
-
+    logger.info("Shutting Down Identity Service")
+    identity_publisher.stop()
+    await task_publisher
     await nats.shutdown()
     logger.info("NATS Messaging Core successfully disconnected.")
 

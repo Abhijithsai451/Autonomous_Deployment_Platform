@@ -4,35 +4,40 @@ from uuid import UUID
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from apps.workflow.domain.events.blueprint_events import BlueprintAlreadyExists, BlueprintCreatedEvent, \
+    BlueprintUpdateEvent
 from apps.workflow.domain.outbox import OutboxEvent, OutboxStatus
 from apps.workflow.domain.workflow_blueprints import WorkflowBlueprint
-from apps.workflow.domain.workflow_events import WorkflowEvent
 
 class BlueprintService:
     def __init__(self, db: Session):
         self.db = db
 
-    def _log_event(self, blueprint_id: UUID, event_type: str, payload: dict) -> OutboxEvent:
-
-        outbox_entry = OutboxEvent(event_type=f"workflow.events.{event_type}",aggregate_type="WorkflowBlueprint",
-            aggregate_id=blueprint_id,
-            payload={
-                "blueprint_id": str(blueprint_id),
-                **payload
-            },
+    def _log_event(self, aggregate_id:Optional[UUID], aggregate_type: str, event_type: str, payload: dict):
+        outbox_entry = OutboxEvent(
+            aggregate_id=aggregate_id,
+            aggregate_type=aggregate_type,
+            event_type=event_type,
+            payload=payload,
             status=OutboxStatus.PENDING
         )
         self.db.add(outbox_entry)
-        return outbox_entry
 
-    def create_blueprint(self, name: str, definition: dict, description: Optional[str] = None,
+    def create_blueprint(self,  name: str, definition: dict, description: Optional[str] = None,
         version: int = 1 ) -> WorkflowBlueprint:
         existing = (
             self.db.query(WorkflowBlueprint)
-            .filter(WorkflowBlueprint.name == name, WorkflowBlueprint.version == version)
+            .filter( WorkflowBlueprint.name == name, WorkflowBlueprint.version == version)
             .first()
         )
         if existing:
+            self._log_event(
+                aggregate_type="BLUEPRINT",
+                event_type=BlueprintAlreadyExists(name=name).subject,
+                payload={
+                "name": name,
+                "error": f"Blueprint with the name {name} already exists"
+            })
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, 
                 detail=f"Blueprint '{name}' with version {version} already exists"
@@ -47,14 +52,17 @@ class BlueprintService:
         )
         self.db.add(blueprint)
         self.db.flush()
-
-        # Stage Outbox + Audit records atomically
         self._log_event(
-            blueprint_id=blueprint.id,
-            event_type="BlueprintCreated",
-            payload={"name": blueprint.name, "version": blueprint.version}
+            aggregate_id=blueprint.id,
+            aggregate_type="BLUEPRINT",
+            event_type=BlueprintCreatedEvent(id = blueprint.id).subject,
+            payload={
+                "id": str(blueprint.id),
+                "name": blueprint.name,
+                "version": blueprint.version,
+                "is_active": blueprint.is_active
+            }
         )
-
         self.db.commit()
         self.db.refresh(blueprint)
         return blueprint
@@ -78,11 +86,17 @@ class BlueprintService:
             if hasattr(blueprint, k):
                 setattr(blueprint, k, v)
 
-        # Stage Outbox + Audit records
+
         self._log_event(
-            blueprint_id=blueprint.id,
-            event_type="BlueprintUpdated",
-            payload={"name": blueprint.name, "version": blueprint.version}
+            aggregate_id=blueprint.id,
+            aggregate_type="BLUEPRINT",
+            event_type= BlueprintUpdateEvent(id=blueprint_id).subject,
+            payload={
+                "id": str(blueprint.id),
+                "name": blueprint.name,
+                "version": blueprint.version,
+                "is_active":blueprint.is_active,
+            }
         )
 
         self.db.commit()

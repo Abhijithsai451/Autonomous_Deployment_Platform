@@ -2,43 +2,52 @@
 -- DATABASE SETUP
 -- ========================================================
 CREATE DATABASE workflow;
+
 \c workflow;
 
+-- ========================================================
+-- SCHEMA SETUP
+-- ========================================================
 CREATE SCHEMA IF NOT EXISTS workflow;
 
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp" SCHEMA workflow;
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp" SCHEMA public;
+
+-- Set search_path for current execution
+SET search_path TO workflow, public;
 
 -- ========================================================
 -- ENUMS
 -- ========================================================
-
 CREATE TYPE workflow.workflow_status AS ENUM (
-            'PENDING',
-            'RUNNING',
-            'WAITING_FOR_APPROVAL',
-            'PAUSED',
-            'COMPLETED',
-            'FAILED',
-            'CANCELLED'
-        );
+    'PENDING',
+    'RUNNING',
+    'WAITING_FOR_APPROVAL',
+    'PAUSED',
+    'COMPLETED',
+    'FAILED',
+    'CANCELLED'
+);
 
 CREATE TYPE workflow.task_status AS ENUM (
-            'PENDING',
-            'READY',
-            'RUNNING',
-            'COMPLETED',
-            'FAILED',
-            'CANCELLED'
-        );
+    'PENDING',
+    'READY',
+    'RUNNING',
+    'COMPLETED',
+    'FAILED',
+    'CANCELLED'
+);
 
 CREATE TYPE workflow.outbox_status AS ENUM (
-            'PENDING',
-            'PROCESSING',
-            'PROCESSED',
-            'FAILED',
-            'DEAD_LETTER'
-        );
+    'PENDING',
+    'PROCESSING',
+    'PUBLISHED',
+    'FAILED',
+    'DEAD_LETTER'
+);
 
+-- ========================================================
+-- TABLES
+-- ========================================================
 CREATE TABLE IF NOT EXISTS workflow.workflow_blueprints (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(255) NOT NULL,
@@ -103,7 +112,7 @@ CREATE TABLE IF NOT EXISTS workflow.workflow_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     workflow_instance_id UUID NOT NULL REFERENCES workflow.workflow_instances(id) ON DELETE CASCADE,
     task_id UUID REFERENCES workflow.tasks(id) ON DELETE SET NULL,
-    event_type VARCHAR(100) NOT NULL, -- e.g. "WorkflowStarted", "TaskCompleted"
+    event_type VARCHAR(100) NOT NULL,
     payload JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
@@ -112,7 +121,7 @@ CREATE TABLE IF NOT EXISTS workflow.outbox_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     event_type VARCHAR(100) NOT NULL,
     aggregate_type VARCHAR(50) NOT NULL,
-    aggregate_id UUID NOT NULL,
+    aggregate_id UUID,
     payload JSONB NOT NULL DEFAULT '{}'::jsonb,
     status workflow.outbox_status NOT NULL DEFAULT 'PENDING',
     retry_count INT NOT NULL DEFAULT 0,
@@ -126,10 +135,12 @@ CREATE TABLE IF NOT EXISTS workflow.outbox_events (
 CREATE TABLE IF NOT EXISTS workflow.processed_events (
     event_id VARCHAR(255) PRIMARY KEY,
     consumer_group VARCHAR(100) NOT NULL,
-    processed_at TIMESTAMP WITH TIME ZONE DEFAULT  CURRENT_TIMESTAMP NOT NULL
+    processed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
-
+-- ========================================================
+-- INDEXES
+-- ========================================================
 CREATE INDEX IF NOT EXISTS idx_instances_blueprint ON workflow.workflow_instances(blueprint_id);
 CREATE INDEX IF NOT EXISTS idx_instances_status ON workflow.workflow_instances(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_instance ON workflow.tasks(workflow_instance_id);
@@ -138,7 +149,8 @@ CREATE INDEX IF NOT EXISTS idx_events_instance ON workflow.workflow_events(workf
 CREATE INDEX IF NOT EXISTS idx_outbox_status ON workflow.outbox_events(status);
 CREATE INDEX IF NOT EXISTS idx_outbox_event_type ON workflow.outbox_events(event_type);
 CREATE INDEX IF NOT EXISTS idx_outbox_aggregate ON workflow.outbox_events(aggregate_type, aggregate_id);
-CREATE INDEX IF NOT EXISTS idx_processed_events ON workflow.processed_events(consumer_group,processed_at);
+CREATE INDEX IF NOT EXISTS idx_processed_events ON workflow.processed_events(consumer_group, processed_at);
+
 -- ========================================================
 -- SEED DATA
 -- ========================================================
@@ -191,7 +203,8 @@ SELECT
 FROM workflow.tasks
 WHERE random() > 0.5;
 
-INSERT INTO workflow.outbox_events (event_type, aggregate_type, aggregate_id, payload, status, processed_at)
+-- Consistent Seed Outbox Events for Workflow Instances
+INSERT INTO workflow.outbox_events (event_type, aggregate_type, aggregate_id, payload, status, retry_count, error_message, processed_at)
 SELECT
     'WorkflowStarted',
     'WorkflowInstance',
@@ -201,13 +214,19 @@ SELECT
         'blueprint_id', blueprint_id,
         'status', status
     ),
-    (ARRAY['PENDING', 'PROCESSED'])[floor(random() * 2 + 1)]::workflow.outbox_status,
-    CASE WHEN random() > 0.5 THEN NOW() ELSE NULL END
-FROM workflow.workflow_instances
-WHERE random() > 0.4;
+    seed_status,
+    CASE WHEN seed_status = 'FAILED' THEN 5 ELSE 0 END,
+    CASE WHEN seed_status = 'FAILED' THEN 'NATS connection error' ELSE NULL END,
+    CASE WHEN seed_status = 'PUBLISHED' THEN NOW() ELSE NULL END
+FROM (
+    SELECT id, blueprint_id, status,
+           (ARRAY['PENDING', 'PUBLISHED', 'FAILED'])[floor(random() * 3 + 1)]::workflow.outbox_status AS seed_status
+    FROM workflow.workflow_instances
+    WHERE random() > 0.4
+) subquery;
 
--- Seed Outbox Events for Tasks
-INSERT INTO workflow.outbox_events (event_type, aggregate_type, aggregate_id, payload, status, processed_at)
+-- Consistent Seed Outbox Events for Tasks
+INSERT INTO workflow.outbox_events (event_type, aggregate_type, aggregate_id, payload, status, retry_count, error_message, processed_at)
 SELECT
     'TaskCompleted',
     'Task',
@@ -218,9 +237,15 @@ SELECT
         'action_type', action_type,
         'status', status
     ),
-    (ARRAY['PENDING', 'PROCESSED', 'FAILED'])[floor(random() * 3 + 1)]::workflow.outbox_status,
-    CASE WHEN random() > 0.5 THEN NOW() ELSE NULL END
-FROM workflow.tasks
-WHERE status = 'COMPLETED';
+    seed_status,
+    CASE WHEN seed_status = 'FAILED' THEN 5 ELSE 0 END,
+    CASE WHEN seed_status = 'FAILED' THEN 'NATS connection error' ELSE NULL END,
+    CASE WHEN seed_status = 'PUBLISHED' THEN NOW() ELSE NULL END
+FROM (
+    SELECT id, workflow_instance_id, action_type, status,
+           (ARRAY['PENDING', 'PUBLISHED', 'FAILED'])[floor(random() * 3 + 1)]::workflow.outbox_status AS seed_status
+    FROM workflow.tasks
+    WHERE status = 'COMPLETED'
+) subquery;
 
 COMMIT;

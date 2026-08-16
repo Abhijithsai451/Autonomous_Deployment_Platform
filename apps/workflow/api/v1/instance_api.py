@@ -6,8 +6,9 @@ from sqlalchemy.orm import Session
 from apps.workflow.application.instance_service import InstanceService
 from apps.workflow.domain.exceptions import InvalidStateTransitionError
 from apps.workflow.infrastructure.database import workflow_db_session
+from packages.auth.auth_jwt import get_current_user
 
-router = APIRouter(prefix="/instances", tags=["Workflow Instances"])
+router = APIRouter(prefix="/instances", tags=["Workflow Instances"], dependencies=[Depends(get_current_user)])
 
 class PaginatedInstanceResponse(BaseModel):
     items : List[dict]

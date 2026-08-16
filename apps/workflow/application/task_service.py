@@ -6,10 +6,11 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from apps.workflow.application.dependency_service import TaskDependencyEngine
+from apps.workflow.domain.events.tasks_events import TaskNotFoundEvent, TaskStartedEvent, TaskReadyEvent, \
+    TaskCompletedEvent, TaskFailedEvent, TaskRetryEvent, TaskCancelEvent
 from apps.workflow.domain.exceptions import InvalidStateTransitionError
 from apps.workflow.domain.outbox import OutboxEvent, OutboxStatus
 from apps.workflow.domain.tasks import Task, TaskStatus
-from apps.workflow.domain.workflow_events import WorkflowEvent
 
 
 class TaskService:
@@ -17,33 +18,27 @@ class TaskService:
         self.db = db
         self.dependency_engine = TaskDependencyEngine(db)
 
-    def _log_event(self,instance_id: UUID,task_id: UUID,event_type: str,payload: dict) -> WorkflowEvent:
-        event = WorkflowEvent(
-            workflow_instance_id=instance_id,
-            task_id=task_id,
+    def _log_event(self, aggregate_id: UUID, aggregate_type: str, event_type: str, payload: dict):
+        outbox_entry = OutboxEvent(
+            aggregate_id=aggregate_id,
+            aggregate_type=aggregate_type,
             event_type=event_type,
             payload=payload,
-        )
-        self.db.add(event)
-
-        outbox_entry = OutboxEvent(
-            event_type=event_type,
-            aggregate_type="Task",
-            aggregate_id=task_id,
-            payload={
-                "task_id": str(task_id),
-                "instance_id": str(instance_id),
-                **payload
-            },
             status=OutboxStatus.PENDING
         )
         self.db.add(outbox_entry)
 
-        return event
-
     def get_task_by_id(self, task_id: UUID) -> Task:
         task = self.db.query(Task).filter(Task.id == task_id).first()
         if not task:
+            event = TaskNotFoundEvent(task_id=task.id).subject
+            payload = {"id": task_id, "error":f"Task Not Found with task id {task_id}"}
+            self._log_event(
+                aggregate_id=task.id,
+                aggregate_type="TASK",
+                event_type=event,
+                payload = payload
+            )
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Task not found with id {task_id}"
@@ -56,7 +51,24 @@ class TaskService:
     def mark_task_ready(self, task_id: UUID) -> Task:
         task =  self.get_task_by_id(task_id)
         task.mark_ready()
+        event = TaskReadyEvent(task_id=task.id,
+                                 instance_id=task.workflow_instance_id,
+                                 action_type=task.action_type,
+                                 input_data=task.input_data
+                                 ).subject
+        payload = {
+            "task_id": str(task.id),
+            "instance_id": str(task.workflow_instance_id),
+            "action_type": str(task.action_type),
+            "input_data": task.input_data,
+        }
 
+        self._log_event(
+            aggregate_id=task.id,
+            aggregate_type="TASK",
+            event_type=event,
+            payload=payload
+        )
         self._log_event(task.workflow_instance_id, task.id, "TaskReady", {})
         self.db.commit()
         self.db.refresh(task)
@@ -68,12 +80,23 @@ class TaskService:
         task.start()
         if assigned_agent_id:
             task.assigned_agent_id = assigned_agent_id
+        event = TaskStartedEvent(task_id = task.id,
+                                instance_id=task.workflow_instance_id,
+                                action_type =task.action_type,
+                                input_data=task.input_data
+                                 ).subject
+        payload = {
+            "task_id": str(task.id),
+            "instance_id": str(task.workflow_instance_id),
+            "action_type": str(task.action_type),
+            "input_data": task.input_data,
+        }
 
         self._log_event(
-            task.workflow_instance_id,
-            task.id,
-            "TaskStarted",
-            {"assigned_agent_id": str(assigned_agent_id) if assigned_agent_id else None}
+            aggregate_id=task.id,
+            aggregate_type="TASK",
+            event_type = event,
+            payload = payload
         )
         self.db.commit()
         self.db.refresh(task)
@@ -82,6 +105,14 @@ class TaskService:
     def complete_task(self, task_id: UUID, output_data: dict = None) -> Task:
         task = self.db.get(Task, task_id)
         if not task:
+            event = TaskNotFoundEvent(task_id=task.id).subject
+            payload = {"id": task_id, "error": f"Task Not Found with task id {task_id}"}
+            self._log_event(
+                aggregate_id=task.id,
+                aggregate_type="TASK",
+                event_type=event,
+                payload=payload
+            )
             raise ValueError(f"Task with ID {task_id} not found.")
 
         task.status = TaskStatus.COMPLETED
@@ -89,15 +120,27 @@ class TaskService:
         if output_data:
             task.output_data = output_data
 
+        event = TaskCompletedEvent(task_id=task.id,
+                                 instance_id=task.workflow_instance_id,
+                                 action_type=task.action_type,
+                                 input_data=task.input_data,
+                                result = task.output_data
+                                 ).subject
+        payload = {
+            "task_id": str(task.id),
+            "instance_id": str(task.workflow_instance_id),
+            "action_type": str(task.action_type),
+            "input_data": task.input_data,
+            "result": task.output_data
+        }
+
         self._log_event(
-            instance_id=task.workflow_instance_id,
-            task_id=task.id,
-            event_type="workflow.events.TaskCompleted",
-            payload={"status": task.status.value}
+            aggregate_id=task.id,
+            aggregate_type="TASK",
+            event_type=event,
+            payload=payload
         )
-
         self.dependency_engine.evaluate_downstream_tasks(task)
-
         self.db.commit()
         self.db.refresh(task)
         return task
@@ -111,11 +154,25 @@ class TaskService:
         task.completed_at = datetime.now(timezone.utc)
         task.error_details = error_details
 
+        event = TaskFailedEvent(task_id=task.id,
+                                 instance_id=task.workflow_instance_id,
+                                 action_type=task.action_type,
+                                 input_data=task.input_data,
+                                 error_message= task.error_details
+                                 ).subject
+        payload = {
+            "task_id": str(task.id),
+            "instance_id": str(task.workflow_instance_id),
+            "action_type": str(task.action_type),
+            "input_data": task.input_data,
+            "error_message": task.error_details
+        }
+
         self._log_event(
-            instance_id=task.workflow_instance_id,
-            task_id=task.id,
-            event_type="workflow.events.TaskFailed",
-            payload={"status": task.status.value, "error": error_details}
+            aggregate_id=task.id,
+            aggregate_type="TASK",
+            event_type=event,
+            payload=payload
         )
 
         self.dependency_engine.cascade_failure(task)
@@ -128,11 +185,23 @@ class TaskService:
         task = self.get_task_by_id(task_id)
         task.retry()
 
+        event = TaskRetryEvent(task_id=task.id,
+                                instance_id=task.workflow_instance_id,
+                                action_type=task.action_type,
+                                input_data=task.input_data,
+                                ).subject
+        payload = {
+            "task_id": str(task.id),
+            "instance_id": str(task.workflow_instance_id),
+            "action_type": str(task.action_type),
+            "input_data": task.input_data,
+        }
+
         self._log_event(
-            task.workflow_instance_id,
-            task.id,
-            "TaskRetried",
-            {"retry_count": task.retry_count}
+            aggregate_id=task.id,
+            aggregate_type="TASK",
+            event_type=event,
+            payload=payload
         )
         self.db.commit()
         self.db.refresh(task)
@@ -142,8 +211,25 @@ class TaskService:
         task = self.get_task_by_id(task_id)
 
         task.cancel(reason=reason)
+        event = TaskCancelEvent(task_id=task.id,
+                               instance_id=task.workflow_instance_id,
+                               action_type=task.action_type,
+                               input_data=task.input_data,
+                               ).subject
+        payload = {
+            "task_id": str(task.id),
+            "instance_id": str(task.workflow_instance_id),
+            "action_type": str(task.action_type),
+            "input_data": task.input_data,
+        }
 
-        self._log_event(task.workflow_instance_id, task.id, "TaskCancelled", {"reason": reason})
+        self._log_event(
+            aggregate_id=task.id,
+            aggregate_type="TASK",
+            event_type=event,
+            payload=payload
+        )
+
         self.db.commit()
         self.db.refresh(task)
         return task

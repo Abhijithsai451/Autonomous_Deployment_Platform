@@ -9,7 +9,6 @@ class ApiKey(Base):
     __table_args__ = {"schema": "identity"}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    organization_id = Column(UUID(as_uuid=True), ForeignKey("identity.organizations.id"), nullable=False)
     service_account_id = Column(UUID(as_uuid=True), ForeignKey("identity.service_accounts.id"), nullable=True)
     name = Column(String(100), nullable=False)
     hashed_key = Column(String(255), nullable=False)

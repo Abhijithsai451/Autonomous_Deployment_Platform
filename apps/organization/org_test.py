@@ -6,9 +6,19 @@ from sqlalchemy import text
 
 from apps.organization.infrastructure.database import org_db_client as db_client
 from apps.organization.org_main import app
-from infrastructure.nats.nats_client import EventBus
+from packages.auth.auth_jwt import get_current_user
+
 
 DATA = {}
+MOCK_USER = ({"id": "test-user-id", "email": "test@example.com", "role": "admin"})
+
+@pytest.fixture(autouse=True)
+def override_auth_dependency():
+    """Automatically overrides the auth dependency for all tests."""
+    app.dependency_overrides[get_current_user] = lambda: MOCK_USER
+    yield
+    app.dependency_overrides.clear()
+
 @pytest.fixture(scope="function", autouse=True)
 def db_session():
     connection = db_client.engine.connect()
@@ -32,10 +42,9 @@ def db_session():
 
 @pytest.fixture
 async def client():
-    EventBus._publisher = None
-    EventBus._subscriber = None
+    headers = {"Authorization": f"Bearer {MOCK_USER}"}
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+    async with AsyncClient(transport=transport, base_url="http://test", headers=headers) as ac:
         async with app.router.lifespan_context(app):
             yield ac
 

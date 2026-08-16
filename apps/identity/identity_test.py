@@ -1,6 +1,4 @@
-import os
 import uuid
-
 import nats
 import pytest
 from keycloak import KeycloakAdmin
@@ -52,9 +50,6 @@ def db_session():
     transaction = connection.begin()
 
     session = db_client.SessionLocal(bind=connection)
-    org = session.execute(text("SELECT id FROM identity.organizations LIMIT 1")).fetchone()
-    if org:
-        DATA["org_id"] = str(org[0])
     user = session.execute(text("SELECT id FROM identity.users LIMIT 1")).fetchone()
     if user:
         DATA["user_id"] = str(user[0])
@@ -72,13 +67,10 @@ def db_session():
 
 @pytest.fixture
 async def client():
-    nats_client._publisher = None
-    nats_client._subscriber = None
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         async with app.router.lifespan_context(app):
             yield ac
-    await nats_client.shutdown()
 
 
 @pytest.mark.anyio
@@ -128,7 +120,6 @@ async def test_users_invite(client):
     payload = {
         "email": f"newuser-{uuid.uuid4().hex[:6]}@cortexops.io",
         "role_id": DATA.get("role_id", str(uuid.uuid4())),
-        "organization_id": DATA.get("org_id", str(uuid.uuid4())),
         "display_name": "New User"
     }
     try:
@@ -208,7 +199,6 @@ async def test_roles_get(client):
 async def test_roles_create(client):
     payload = {
         "name": "IntegrationTestRole",
-        "organization_id": str(DATA.get("org_id", uuid.uuid4())),
         "permissions": []
     }
     response = await client.post("/roles", json=payload)
@@ -247,8 +237,6 @@ async def test_service_accounts_create(client):
     payload = {
         "client_id": f"sa-dynamic-client-{uuid.uuid4().hex[:6]}",
         "description": "Dynamic Integration Runner",
-        "org_id": DATA.get("org_id", str(uuid.uuid4())),
-        "organization_id": DATA.get("org_id", str(uuid.uuid4()))
     }
     try:
         response = await client.post("/service-accounts", json=payload)
@@ -282,7 +270,7 @@ async def test_api_keys_list(client):
 @pytest.mark.anyio
 async def test_api_keys_create(client):
     payload = {
-        "organization_id": str(DATA.get("org_id", uuid.uuid4())),
+        "user_id": str(DATA.get("user_id", uuid.uuid4())),
         "service_account_id": str(DATA.get("service_account_id", uuid.uuid4())),
         "hashed_key": "raw_test_hashed_string"
     }

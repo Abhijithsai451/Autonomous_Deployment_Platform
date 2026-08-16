@@ -54,7 +54,7 @@ echo "🏗️  Launching Core Infrastructure (Databases & Brokers)..."
 docker compose --env-file .env -f "$INFRA_COMPOSE" up -d
 
 echo "⏳ Waiting a few seconds for core services to stabilize..."
-sleep 5
+sleep 2
 
 # 3. Launch Application Services (Identity , Audit, Workflow etc.)
 echo "⚡ Launching Application Services..."
@@ -94,3 +94,5 @@ echo "========================================="
 echo "🎉 All systems are online and verified!"
 echo "========================================="
 echo "💡 To view logs, run: docker compose -f $APPS_COMPOSE logs -f"
+
+
