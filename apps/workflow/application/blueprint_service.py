@@ -54,6 +54,7 @@ class BlueprintService:
         self.db.flush()
         self._log_event(
             aggregate_id=blueprint.id,
+            aggregate_type="BLUEPRINT",
             event_type=BlueprintCreatedEvent(id = blueprint.id).subject,
             payload={
                 "id": str(blueprint.id),
@@ -87,7 +88,8 @@ class BlueprintService:
 
 
         self._log_event(
-           aggregate_id=blueprint.id,
+            aggregate_id=blueprint.id,
+            aggregate_type="BLUEPRINT",
             event_type= BlueprintUpdateEvent(id=blueprint_id).subject,
             payload={
                 "id": str(blueprint.id),

@@ -49,7 +49,7 @@ class InstanceService:
                 "id": str(instance.id),
                 "blueprint_id": str(blueprint_id),
                 "triggered_by": triggered_by,
-                "status": instance.status,
+                "status": instance.status.value,
             }
         )
 
@@ -85,7 +85,7 @@ class InstanceService:
                 "id": str(instance.id),
                 "blueprint_id": str(instance.blueprint_id),
                 "triggered_by": instance.triggered_by,
-                "status": instance.status,
+                "status": instance.status.value,
             })
 
         root_tasks = (
