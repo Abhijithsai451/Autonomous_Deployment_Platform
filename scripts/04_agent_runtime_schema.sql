@@ -12,7 +12,7 @@ CREATE SCHEMA IF NOT EXISTS agent_runtime;
 -- ========================================================
 CREATE TYPE agent_runtime.agent_type AS ENUM ('ACTIVE', 'DISABLED');
 CREATE TYPE agent_runtime.agent_status AS ENUM ('READY', 'PROCESSING', 'FAILED', 'FINISHED');
-
+CREATE TYPE agent_runtime.outbox_status AS ENUM ('PENDING', 'PROCESSING', 'PUBLISHED', 'FAILED', 'DEAD_LETTER');
 
 -- ========================================================
 -- TABLES
@@ -41,6 +41,21 @@ CREATE TABLE agent_runtime.agent_run (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE agent_runtime.outbox_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_type VARCHAR(100) NOT NULL,
+    aggregate_type VARCHAR(50) NOT NULL,
+    aggregate_id UUID,
+    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+    status agent_runtime.outbox_status NOT NULL DEFAULT 'PENDING',
+    retry_count INT NOT NULL DEFAULT 0,
+    error_message TEXT,
+    max_retries INT NOT NULL DEFAULT 5,
+    last_error TEXT DEFAULT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    processed_at TIMESTAMP WITH TIME ZONE
+);
+
 CREATE TABLE agent_runtime.processed_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     event_id UUID NOT NULL,
@@ -57,7 +72,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_task_id ON agent_runtime.agent_run(t
 CREATE UNIQUE INDEX IF NOT EXISTS idx_workflow_instance_id ON agent_runtime.agent_run(workflow_instance_id);
 CREATE INDEX IF NOT EXISTS idx_agent_status ON agent_runtime.agents(status);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_created_at ON agent_runtime.agents(created_at);
-
+CREATE INDEX IF NOT EXISTS idx_outbox_pending_poller ON agent_runtime.outbox_events(status, created_at) WHERE status = 'PENDING';
+CREATE INDEX IF NOT EXISTS idx_outbox_aggregate ON agent_runtime.outbox_events(aggregate_type, aggregate_id);
 -- ========================================================
 -- SEED DATA
 -- ========================================================
@@ -203,5 +219,106 @@ SELECT
     ),
     NOW()
 FROM inserted_agent_runs;
+
+-- 4. SEED OUTBOX EVENTS
+INSERT INTO agent_runtime.outbox_events (
+    event_type,
+    aggregate_type,
+    aggregate_id,
+    payload,
+    status,
+    retry_count,
+    error_message,
+    max_retries,
+    last_error,
+    created_at,
+    processed_at
+)
+SELECT
+    CASE
+        WHEN rn = 1 THEN 'workflow.events.task.created'
+        WHEN rn = 2 THEN 'workflow.events.task.ready'
+        WHEN rn = 3 THEN 'workflow.events.task.started'
+        WHEN rn = 4 THEN 'workflow.events.task.completed'
+        WHEN rn = 5 THEN 'workflow.events.task.failed'
+        WHEN rn = 6 THEN 'workflow.events.task.retry'
+        WHEN rn = 7 THEN 'workflow.events.task.cancel'
+        WHEN rn = 8 THEN 'agent_runtime.agent.ready'
+        WHEN rn = 9 THEN 'agent_runtime.agent.processing'
+        ELSE 'agent_runtime.agent.finished'
+    END,
+    CASE
+        WHEN rn <= 7 THEN 'TASK'
+        ELSE 'AGENT_RUN'
+    END,
+    task_id,
+    jsonb_build_object(
+        'event_id', gen_random_uuid(),
+        'task_id', task_id,
+        'instance_id', workflow_instance_id,
+        'workflow_instance_id', workflow_instance_id,
+        'agent_run_id', id,
+        'agent_id', agent_id,
+        'status', status,
+        'action_type', CASE
+            WHEN rn = 1 THEN 'create'
+            WHEN rn = 2 THEN 'prepare'
+            WHEN rn = 3 THEN 'start'
+            WHEN rn = 4 THEN 'complete'
+            WHEN rn = 5 THEN 'fail'
+            WHEN rn = 6 THEN 'retry'
+            WHEN rn = 7 THEN 'cancel'
+            WHEN rn = 8 THEN 'agent_ready'
+            WHEN rn = 9 THEN 'agent_processing'
+            ELSE 'agent_finished'
+        END,
+        'input_data', COALESCE(input_data, '{}'::jsonb),
+        'output_data', COALESCE(output_data, '{}'::jsonb),
+        'error', COALESCE(error, '{}'::jsonb),
+        'metadata', jsonb_build_object(
+            'source', 'agent-runtime-seed-script',
+            'seed_row', rn,
+            'published_by', 'test-data-loader'
+        )
+    ),
+    CASE
+        WHEN rn IN (1, 2, 3, 4, 8, 9, 10) THEN 'PENDING'::agent_runtime.outbox_status
+        WHEN rn = 5 THEN 'FAILED'::agent_runtime.outbox_status
+        WHEN rn = 6 THEN 'PROCESSING'::agent_runtime.outbox_status
+        ELSE 'PUBLISHED'::agent_runtime.outbox_status
+    END,
+    CASE
+        WHEN rn = 5 THEN 2
+        WHEN rn = 6 THEN 1
+        ELSE 0
+    END,
+    CASE
+        WHEN rn = 5 THEN 'Mock outbox publish failure for test retry handling'
+        ELSE NULL
+    END,
+    5,
+    CASE
+        WHEN rn = 5 THEN 'Temporary broker unavailable during seed simulation'
+        ELSE NULL
+    END,
+    NOW() - (rn || ' minutes')::interval,
+    CASE
+        WHEN rn = 7 THEN NOW() - INTERVAL '3 minutes'
+        ELSE NULL
+    END
+FROM (
+    SELECT
+        ar.id,
+        ar.agent_id,
+        ar.task_id,
+        ar.workflow_instance_id,
+        ar.status,
+        ar.input_data,
+        ar.output_data,
+        ar.error,
+        row_number() OVER (ORDER BY ar.created_at, ar.id) AS rn
+    FROM agent_runtime.agent_run ar
+    LIMIT 10
+) seeded_runs;
 
 COMMIT;
