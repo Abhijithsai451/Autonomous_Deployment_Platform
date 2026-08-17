@@ -7,6 +7,8 @@ CREATE DATABASE agent_runtime;
 
 CREATE SCHEMA IF NOT EXISTS agent_runtime;
 
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 -- ========================================================
 -- ENUMS
 -- ========================================================
@@ -32,7 +34,7 @@ CREATE TABLE agent_runtime.agent_runs (
     agent_id UUID NOT NULL REFERENCES agent_runtime.agents(id) ON DELETE CASCADE,
     task_id UUID NOT NULL UNIQUE,
     workflow_instance_id UUID NOT NULL,
-    status agent_runtime.run_status NOT NULL DEFAULT 'PENDING',
+    status agent_runtime.run_status NOT NULL DEFAULT 'READY',
     input_data JSONB NOT NULL DEFAULT '{}'::jsonb,
     output_data JSONB,
     error JSONB,
@@ -67,14 +69,40 @@ CREATE TABLE agent_runtime.processed_events (
 -- ========================================================
 -- PERFORMANCE INDEXES
 -- ========================================================
+CREATE UNIQUE INDEX IF NOT EXISTS idx_agents_slug
+    ON agent_runtime.agents(slug);
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_id ON agent_runtime.agents(name);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_task_id ON agent_runtime.agent_run(task_id);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_workflow_instance_id ON agent_runtime.agent_run(workflow_instance_id);
-CREATE INDEX IF NOT EXISTS idx_agent_status ON agent_runtime.agents(status);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_created_at ON agent_runtime.agents(created_at);
-CREATE INDEX IF NOT EXISTS idx_outbox_pending_poller ON agent_runtime.outbox_events(status, created_at) WHERE status = 'PENDING';
-CREATE INDEX IF NOT EXISTS idx_outbox_aggregate ON agent_runtime.outbox_events(aggregate_type, aggregate_id);
+CREATE INDEX IF NOT EXISTS idx_agents_name
+    ON agent_runtime.agents(name);
+
+CREATE INDEX IF NOT EXISTS idx_agents_status
+    ON agent_runtime.agents(status);
+
+CREATE INDEX IF NOT EXISTS idx_agents_created_at
+    ON agent_runtime.agents(created_at);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_runs_task_id
+    ON agent_runtime.agent_runs(task_id);
+
+CREATE INDEX IF NOT EXISTS idx_agent_runs_agent_id
+    ON agent_runtime.agent_runs(agent_id);
+
+CREATE INDEX IF NOT EXISTS idx_agent_runs_workflow_instance_id
+    ON agent_runtime.agent_runs(workflow_instance_id);
+
+CREATE INDEX IF NOT EXISTS idx_agent_runs_status
+    ON agent_runtime.agent_runs(status);
+
+CREATE INDEX IF NOT EXISTS idx_outbox_pending_poller
+    ON agent_runtime.outbox_events(status, created_at)
+    WHERE status = 'PENDING';
+
+CREATE INDEX IF NOT EXISTS idx_outbox_aggregate
+    ON agent_runtime.outbox_events(aggregate_type, aggregate_id);
+
+CREATE INDEX IF NOT EXISTS idx_processed_events_event_id
+    ON agent_runtime.processed_events(event_id);
+
 -- ========================================================
 -- SEED DATA
 -- ========================================================
@@ -84,7 +112,7 @@ BEGIN;
 WITH inserted_agents_raw AS (
     INSERT INTO agent_runtime.agents (
         name,
-        type,
+        slug,
         status,
         configuration,
         created_at,
@@ -92,15 +120,10 @@ WITH inserted_agents_raw AS (
     )
     SELECT
         'Test Agent ' || rn,
+        'test-agent-' || rn,
         CASE
-            WHEN rn IN (4, 8) THEN 'DISABLED'::agent_runtime.agent_type
-            ELSE 'ACTIVE'::agent_runtime.agent_type
-        END,
-        CASE
-            WHEN rn IN (1, 5, 9) THEN 'READY'::agent_runtime.agent_status
-            WHEN rn IN (2, 6, 10) THEN 'PROCESSING'::agent_runtime.agent_status
-            WHEN rn IN (3, 7) THEN 'FAILED'::agent_runtime.agent_status
-            ELSE 'FINISHED'::agent_runtime.agent_status
+            WHEN rn IN (4, 8) THEN 'DISABLED'::agent_runtime.agent_status
+            ELSE 'ACTIVE'::agent_runtime.agent_status
         END,
         jsonb_build_object(
             'model', 'test-model-' || rn,
@@ -124,12 +147,20 @@ WITH inserted_agents_raw AS (
         NOW() - (rn || ' hours')::interval,
         NOW() - ((rn * 30) || ' minutes')::interval
     FROM generate_series(1, 10) AS rn
-    RETURNING id, name, type, status
+    RETURNING id, name, slug, status, configuration, created_at
 ),
-
--- 2. SEED AGENT RUNS
+inserted_agents AS (
+    SELECT
+        id,
+        name,
+        slug,
+        status,
+        configuration,
+        row_number() OVER (ORDER BY created_at, id) AS rn
+    FROM inserted_agents_raw
+),
 inserted_agent_runs AS (
-    INSERT INTO agent_runtime.agent_run (
+    INSERT INTO agent_runtime.agent_runs (
         agent_id,
         task_id,
         workflow_instance_id,
@@ -145,42 +176,47 @@ inserted_agent_runs AS (
         id,
         gen_random_uuid(),
         gen_random_uuid(),
-        status,
+        CASE
+            WHEN rn IN (1, 5, 9) THEN 'READY'::agent_runtime.run_status
+            WHEN rn IN (2, 6, 10) THEN 'PROCESSING'::agent_runtime.run_status
+            WHEN rn IN (3, 7) THEN 'FAILED'::agent_runtime.run_status
+            ELSE 'FINISHED'::agent_runtime.run_status
+        END,
         jsonb_build_object(
             'task_name', 'Test Task for ' || name,
             'action_type', CASE
-                WHEN status = 'READY'::agent_runtime.agent_status THEN 'prepare'
-                WHEN status = 'PROCESSING'::agent_runtime.agent_status THEN 'execute'
-                WHEN status = 'FAILED'::agent_runtime.agent_status THEN 'retryable_operation'
+                WHEN rn IN (1, 5, 9) THEN 'prepare'
+                WHEN rn IN (2, 6, 10) THEN 'execute'
+                WHEN rn IN (3, 7) THEN 'retryable_operation'
                 ELSE 'summarize'
             END,
             'input_reference', gen_random_uuid(),
             'payload', jsonb_build_object(
                 'source', 'seed-script',
                 'agent_name', name,
-                'agent_type', type
+                'agent_slug', slug
             )
         ),
         CASE
-            WHEN status = 'FINISHED'::agent_runtime.agent_status THEN jsonb_build_object(
+            WHEN rn IN (4, 8) THEN jsonb_build_object(
                 'result', 'completed',
                 'message', 'Test workflow completed successfully',
                 'records_processed', 100,
                 'confidence', 0.95
             )
-            WHEN status = 'PROCESSING'::agent_runtime.agent_status THEN jsonb_build_object(
+            WHEN rn IN (2, 6, 10) THEN jsonb_build_object(
                 'result', 'in_progress',
                 'progress_percent', 50,
                 'current_step', 'processing test payload'
             )
-            WHEN status = 'READY'::agent_runtime.agent_status THEN jsonb_build_object(
+            WHEN rn IN (1, 5, 9) THEN jsonb_build_object(
                 'result', 'queued',
                 'message', 'Run is ready for execution'
             )
             ELSE NULL
         END,
         CASE
-            WHEN status = 'FAILED'::agent_runtime.agent_status THEN jsonb_build_object(
+            WHEN rn IN (3, 7) THEN jsonb_build_object(
                 'code', 'TEST_AGENT_FAILURE',
                 'message', 'Mock failure generated by seed data',
                 'retryable', true
@@ -189,37 +225,27 @@ inserted_agent_runs AS (
         END,
         NOW() - INTERVAL '45 minutes',
         CASE
-            WHEN status IN (
-                'FINISHED'::agent_runtime.agent_status,
-                'FAILED'::agent_runtime.agent_status
-            )
+            WHEN rn IN (3, 4, 7, 8)
             THEN NOW() - INTERVAL '10 minutes'
             ELSE NULL
         END,
         NOW() - INTERVAL '45 minutes'
-    FROM inserted_agents_raw
-    RETURNING id, agent_id, task_id, workflow_instance_id, status
+    FROM inserted_agents
+    RETURNING id, agent_id, task_id, workflow_instance_id, status, input_data, output_data, error, created_at
+),
+inserted_processed_events AS (
+    INSERT INTO agent_runtime.processed_events (
+        event_id,
+        consumer_group,
+        processed_at
+    )
+    SELECT
+        gen_random_uuid(),
+        'agent-runtime-test-consumer',
+        NOW()
+    FROM inserted_agent_runs
+    RETURNING id
 )
-
--- 3. SEED PROCESSED EVENTS
-INSERT INTO agent_runtime.processed_events (
-    event_id,
-    consumer_group,
-    processed_at
-)
-SELECT
-    gen_random_uuid(),
-    jsonb_build_object(
-        'name', 'agent-runtime-test-consumer',
-        'version', 'v1',
-        'source_run_id', id,
-        'agent_id', agent_id,
-        'task_id', task_id,
-        'workflow_instance_id', workflow_instance_id,
-        'status', status
-    ),
-    NOW()
-FROM inserted_agent_runs;
 
 -- 4. SEED OUTBOX EVENTS
 INSERT INTO agent_runtime.outbox_events (
@@ -252,7 +278,10 @@ SELECT
         WHEN rn <= 7 THEN 'TASK'
         ELSE 'AGENT_RUN'
     END,
-    task_id,
+    CASE
+        WHEN rn <= 7 THEN task_id
+        ELSE id
+    END,
     jsonb_build_object(
         'event_id', gen_random_uuid(),
         'task_id', task_id,
@@ -318,7 +347,7 @@ FROM (
         ar.output_data,
         ar.error,
         row_number() OVER (ORDER BY ar.created_at, ar.id) AS rn
-    FROM agent_runtime.agent_run ar
+    FROM agent_runtime.agent_runs ar
     LIMIT 10
 ) seeded_runs;
 
