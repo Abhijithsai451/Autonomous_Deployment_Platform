@@ -10,8 +10,8 @@ CREATE SCHEMA IF NOT EXISTS agent_runtime;
 -- ========================================================
 -- ENUMS
 -- ========================================================
-CREATE TYPE agent_runtime.agent_type AS ENUM ('ACTIVE', 'DISABLED');
-CREATE TYPE agent_runtime.agent_status AS ENUM ('READY', 'PROCESSING', 'FAILED', 'FINISHED');
+CREATE TYPE agent_runtime.agent_status AS ENUM ('ACTIVE', 'DISABLED');
+CREATE TYPE agent_runtime.run_status AS ENUM ('READY', 'PROCESSING', 'FAILED', 'FINISHED');
 CREATE TYPE agent_runtime.outbox_status AS ENUM ('PENDING', 'PROCESSING', 'PUBLISHED', 'FAILED', 'DEAD_LETTER');
 
 -- ========================================================
@@ -20,24 +20,24 @@ CREATE TYPE agent_runtime.outbox_status AS ENUM ('PENDING', 'PROCESSING', 'PUBLI
 CREATE TABLE agent_runtime.agents (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(150) NOT NULL,
-    type agent_runtime.agent_type NOT NULL DEFAULT 'ACTIVE',
-    status agent_runtime.agent_status NOT NULL DEFAULT 'READY',
-    configuration JSONB NOT NULL,
+    slug VARCHAR(100) NOT NULL UNIQUE,
+    status agent_runtime.agent_status NOT NULL DEFAULT 'ACTIVE',
+    configuration JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE agent_runtime.agent_run (
+CREATE TABLE agent_runtime.agent_runs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    agent_id UUID REFERENCES agent_runtime.agents(id) ON DELETE CASCADE,
-    task_id UUID NOT NULL,
+    agent_id UUID NOT NULL REFERENCES agent_runtime.agents(id) ON DELETE CASCADE,
+    task_id UUID NOT NULL UNIQUE,
     workflow_instance_id UUID NOT NULL,
-    status agent_runtime.agent_status NOT NULL,
-    input_data JSONB,
+    status agent_runtime.run_status NOT NULL DEFAULT 'PENDING',
+    input_data JSONB NOT NULL DEFAULT '{}'::jsonb,
     output_data JSONB,
     error JSONB,
-    started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    completed_at TIMESTAMPTZ DEFAULT NULL,
+    started_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -59,8 +59,9 @@ CREATE TABLE agent_runtime.outbox_events (
 CREATE TABLE agent_runtime.processed_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     event_id UUID NOT NULL,
-    consumer_group JSONB NOT NULL,
-    processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    consumer_group VARCHAR(100) NOT NULL,
+    processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_event_consumer UNIQUE (event_id, consumer_group)
 );
 
 -- ========================================================
