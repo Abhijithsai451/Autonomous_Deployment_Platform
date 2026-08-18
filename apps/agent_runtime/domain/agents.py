@@ -17,7 +17,7 @@ class RunStatus(enum.Enum):
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
 
-class AgentModel(Base):
+class Agent(Base):
     __tablename__ = "agents"
     __table_args__ = {"schema": "agent_runtime"}
 

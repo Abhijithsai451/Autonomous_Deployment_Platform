@@ -13,7 +13,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 -- ENUMS
 -- ========================================================
 CREATE TYPE agent_runtime.agent_status AS ENUM ('ACTIVE', 'DISABLED');
-CREATE TYPE agent_runtime.run_status AS ENUM ('READY', 'PROCESSING', 'FAILED', 'FINISHED');
+CREATE TYPE agent_runtime.run_status AS ENUM ('PENDING', 'RUNNING', 'FAILED', 'COMPLETED');
 CREATE TYPE agent_runtime.outbox_status AS ENUM ('PENDING', 'PROCESSING', 'PUBLISHED', 'FAILED', 'DEAD_LETTER');
 
 -- ========================================================
@@ -34,7 +34,7 @@ CREATE TABLE agent_runtime.agent_runs (
     agent_id UUID NOT NULL REFERENCES agent_runtime.agents(id) ON DELETE CASCADE,
     task_id UUID NOT NULL UNIQUE,
     workflow_instance_id UUID NOT NULL,
-    status agent_runtime.run_status NOT NULL DEFAULT 'READY',
+    status agent_runtime.run_status NOT NULL DEFAULT 'PENDING',
     input_data JSONB NOT NULL DEFAULT '{}'::jsonb,
     output_data JSONB,
     error JSONB,
@@ -177,10 +177,10 @@ inserted_agent_runs AS (
         gen_random_uuid(),
         gen_random_uuid(),
         CASE
-            WHEN rn IN (1, 5, 9) THEN 'READY'::agent_runtime.run_status
-            WHEN rn IN (2, 6, 10) THEN 'PROCESSING'::agent_runtime.run_status
+            WHEN rn IN (1, 5, 9) THEN 'PENDING'::agent_runtime.run_status
+            WHEN rn IN (2, 6, 10) THEN 'RUNNING'::agent_runtime.run_status
             WHEN rn IN (3, 7) THEN 'FAILED'::agent_runtime.run_status
-            ELSE 'FINISHED'::agent_runtime.run_status
+            ELSE 'COMPLETED'::agent_runtime.run_status
         END,
         jsonb_build_object(
             'task_name', 'Test Task for ' || name,
