@@ -22,8 +22,8 @@ class OutboxEvent(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     event_type = Column(String(100), nullable=False, index=True)
     aggregate_type = Column(String(50), nullable=False)
-    aggregate_id = Column(UUID(as_uuid=True), nullable=False, index=True)
-    payload = Column(JSONB, nullable=False)
+    aggregate_id = Column(UUID(as_uuid=True), nullable=True, index=True)
+    payload = Column(JSONB, nullable=False, default={})
     status = Column(
         Enum(OutboxStatus, name="outbox_status", schema="agent_runtime"),
         default=OutboxStatus.PENDING,
@@ -32,17 +32,20 @@ class OutboxEvent(Base):
     )
     retry_count = Column(Integer, default=0, nullable=False)
     error_message = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    max_retries = Column(Integer, default=5, nullable=False)
+    last_error = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     processed_at = Column(DateTime(timezone=True), nullable=True)
 
     def mark_processed(self) -> None:
         self.status = OutboxStatus.PUBLISHED
         self.processed_at = datetime.now(timezone.utc)
 
-    def mark_failed(self, error: str, max_retries: int = 5) -> None:
+    def mark_failed(self, error: str) -> None:
         self.retry_count += 1
         self.error_message = error
-        if self.retry_count >= max_retries:
+        self.last_error = error
+        if self.retry_count >= self.max_retries:
             self.status = OutboxStatus.FAILED
         else:
             self.status = OutboxStatus.PENDING
