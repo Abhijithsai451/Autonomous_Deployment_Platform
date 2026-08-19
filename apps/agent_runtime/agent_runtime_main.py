@@ -1,30 +1,32 @@
 import asyncio
-from fastapi import FastAPI
-
+from contextlib import asynccontextmanager
 from apps.agent_runtime.infrastructure.agent_runtime_nats_client import agent_nats_client as nats
+from apps.agent_runtime.infrastructure.database import agent_db_session
 from apps.agent_runtime.infrastructure.outbox_publisher import AgentRuntimeOutboxPublisher
 from apps.agent_runtime.infrastructure.struct_logger import struct_logger as logger
+from apps.agent_runtime.mock_event import publish_mock_event
+from apps.agent_runtime.workers.event_worker import TaskReadyWorker
 
-agent_runtime_publisher = AgentRuntimeOutboxPublisher(poll_interval_seconds=0.01, batch_size=50)
 
-async def agent_runtime_lifespan(app: FastAPI):
+async def main():
+    logger.info("Initializing the Agent Runtime Daemon ....")
+
     await nats.initialize()
-    logger.info("NATS Messaging Core successfully initialized.")
+    logger.info("NATS Core Messaging is successfully initialized for Agent Runtime Service")
 
-    task_publisher = asyncio.create_task(agent_runtime_publisher.start())
-    yield
-    logger.info("Shutting Down Agent Runtime Service")
-    agent_runtime_publisher.stop()
-    await task_publisher
-    await nats.shutdown()
-    logger.info("NATS Messaging Core successfully disconnected.")
+    outbox_publisher = AgentRuntimeOutboxPublisher(poll_interval_seconds=0.01)
+    asyncio.create_task(outbox_publisher.start())
 
-app = FastAPI(title="CortexOps Agent Runtime Service", lifespan=agent_runtime_lifespan)
+    worker = TaskReadyWorker()
+    await worker.start()
+    logger.info("Agent Runtime is listening for events....")
+    try:
+        await asyncio.Event().wait()
+    except (KeyboardInterrupt, SystemExit):
+        await outbox_publisher.stop()
+        await nats.shutdown()
+        logger.info("Phase 1 Execution run finished successfully ")
 
 
-@app.api_route("/health",methods=["GET", "HEAD"], tags=["System"])
-async def health_check():
-    return {
-        "status": "healthy",
-        "service": "agent_runtime-service"
-    }
+if __name__ == "__main__":
+    asyncio.run(main())
