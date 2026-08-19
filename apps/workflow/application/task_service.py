@@ -31,10 +31,10 @@ class TaskService:
     def get_task_by_id(self, task_id: UUID) -> Task:
         task = self.db.query(Task).filter(Task.id == task_id).first()
         if not task:
-            event = TaskNotFoundEvent(task_id=task.id).subject
-            payload = {"id": task_id, "error":f"Task Not Found with task id {task_id}"}
+            event = TaskNotFoundEvent(task_id=task_id).subject
+            payload = {"id": str(task_id), "error":f"Task Not Found with task id {task_id}"}
             self._log_event(
-                aggregate_id=task.id,
+                aggregate_id=task_id,
                 aggregate_type="TASK",
                 event_type=event,
                 payload = payload

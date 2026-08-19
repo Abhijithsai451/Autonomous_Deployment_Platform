@@ -60,7 +60,7 @@ services:
     container_name: cortexops_agent_runtime
     ports:
       - "8003:8003"
-    command: [ "python", "-m", "uvicorn", "apps.agent_runtime.agent_runtime_main:app", "--host", "0.0.0.0", "--port", "8003" ]
+    command: [ "python", "-m", "apps.agent_runtime.agent_runtime_main"]
     env_file:
       - ../../.env
     environment:
