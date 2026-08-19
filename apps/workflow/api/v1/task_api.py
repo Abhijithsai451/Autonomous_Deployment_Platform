@@ -9,8 +9,8 @@ from apps.workflow.domain.exceptions import InvalidStateTransitionError
 from apps.workflow.infrastructure.database import workflow_db_session
 from packages.auth.auth_jwt import get_current_user
 
-router = APIRouter(tags=["Tasks"], dependencies=[Depends(get_current_user)])
-
+#router = APIRouter(tags=["Tasks"], dependencies=[Depends(get_current_user)])
+router = APIRouter(tags=["Tasks"])
 class StartTaskSchema(BaseModel):
     assigned_agent_id: Optional[UUID] = None
 
