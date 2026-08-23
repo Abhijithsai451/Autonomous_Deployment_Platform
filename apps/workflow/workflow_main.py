@@ -20,7 +20,7 @@ async def department_created_event_handler(payload: dict, metadata: dict):
     description = payload.get("description")
 
     logger.info(
-        f"🎉 [Phase 4 Chain Complete!] Workflow Service received DepartmentCreated: "
+        f"  Workflow Service received DepartmentCreated: "
         f"Dept ID={dept_id}, Description='{description}'"
     )
 
