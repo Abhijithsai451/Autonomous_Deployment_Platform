@@ -14,3 +14,5 @@ class AgentRuntimeOutboxPublisher(OutboxPublisher):
             poll_interval_seconds=poll_interval_seconds,
             batch_size=batch_size
         )
+
+agent_outbox_publisher = AgentRuntimeOutboxPublisher(poll_interval_seconds=0.01)
