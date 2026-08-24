@@ -32,7 +32,7 @@ CREATE TABLE agent_runtime.agents (
 CREATE TABLE agent_runtime.agent_runs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     agent_id UUID NOT NULL REFERENCES agent_runtime.agents(id) ON DELETE CASCADE,
-    task_id UUID NOT NULL UNIQUE,
+    task_id UUID NOT NULL ,
     workflow_instance_id UUID NOT NULL,
     status agent_runtime.run_status NOT NULL DEFAULT 'PENDING',
     input_data JSONB NOT NULL DEFAULT '{}'::jsonb,
