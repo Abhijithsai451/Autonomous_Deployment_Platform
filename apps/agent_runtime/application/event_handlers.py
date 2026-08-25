@@ -22,7 +22,7 @@ def handle_task_ready_event(db:Session, payload: Dict[str,Any], metadata: Dict[s
     event_id = UUID(event_id_str)
     processed_repo = ProcessedEventsRepository(db)
 
-    if processed_repo.is_processed(event_id):
+    if processed_repo.is_processed(event_id=event_id, consumer_group=CONSUMER_GROUP):
         logger.info("Duplicate Event and is Ignored", event_id = event_id_str, consumer_group=CONSUMER_GROUP )
         return True
 

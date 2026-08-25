@@ -38,6 +38,8 @@ def run_vertical_slice_test():
     db_gen = agent_db_session()
     db = next(db_gen)
 
+    # Test is failing because the helper function inside the outbox repository is not found. (get_by_id)
+    # Start by fixing the OutboxRepository
     try:
         #### TEST 1: Process Event for the First Time
         logger.info("Executing Test 1: Processing new task event ...", event_id= str(event_id))
@@ -48,6 +50,7 @@ def run_vertical_slice_test():
         run_repo = AgentRunsRepository(db)
         outbox_repo = OutboxRepository(db)
         processed_repo = ProcessedEventsRepository(db)
+        logger.info("Verified DB Assertions")
 
         # Asserting Agent Run record Created and Completed
         run = run_repo.get_by_task_id(task_id)
@@ -57,7 +60,7 @@ def run_vertical_slice_test():
         logger.info("Assertion Passed: AgentRun created with COMPLETED status.", run_id = str(run.id))
 
         # Assert Event Mark Processed
-        is_processed = processed_repo.is_processed(event_id, "agent-runtime-task-consumer")
+        is_processed = processed_repo.is_processed(event_id= event_id, consumer_group="agent-runtime-task-consumer")
         assert is_processed is True, "Event was not marked as processed in DB."
         logger.info("Assertion Passed: ProcessedEvent Record Verified")
 
@@ -81,5 +84,5 @@ def run_vertical_slice_test():
     finally:
         db_gen.close()
 
-if __name__ == "main":
+if __name__ == "__main__":
     run_vertical_slice_test()

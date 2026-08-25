@@ -9,10 +9,10 @@ APPS_COMPOSE="infrastructure/docker/docker-compose.apps.yml"
 # 📋 MICROSERVICES
 # ==============================================================================
 SERVICES=(
-    #"Identity Service      : 8000 : cortexops_identity      : apps/identity/identity_test.py"
-    #"Organization Service  : 8001 : cortexops_organization  : apps/organization//org_test.py"
-    #"Workflow Service      : 8002 : cortexops_workflow      : apps/workflow/workflow_test.py"
-    #"Agent Runtime Service : 8003 : cortexops_agent_runtime : apps/agent_runtime/agent_runtime_test.py "
+    "Identity Service      : 8000 : cortexops_identity      : apps/identity/identity_test.py"
+    "Organization Service  : 8001 : cortexops_organization  : apps/organization//org_test.py"
+    "Workflow Service      : 8002 : cortexops_workflow      : apps/workflow/workflow_test.py"
+    "Agent Runtime Service : 8003 : cortexops_agent_runtime : apps/agent_runtime/agent_runtime_test.py "
     #"Audit Service         : 8002 : cortexops_audit         : tests/test_audit.py"
     #"Workflow Service      : 8003 : cortexops_workflow      : tests/test_workflow.py"
     # Add your other 6 services here as you build them!
