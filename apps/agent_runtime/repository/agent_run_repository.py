@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from apps.agent_runtime.domain.agent_runs import AgentRuns
 
 
-class AgentRunRepository:
+class AgentRunsRepository:
     def __init__(self, db: Session):
         self.db = db
 
