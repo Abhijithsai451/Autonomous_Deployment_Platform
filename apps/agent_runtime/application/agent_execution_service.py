@@ -45,7 +45,7 @@ class AgentExecutionService:
             agent_instance = self.registry.resolve(agent_record.slug)
             result : AgentResult = agent_instance.execute(context)
 
-            if result.status == AgentExecutionService.COMPLETED:
+            if result.status == AgentExecutionStatus.COMPLETED:
                 self.run_repo.mark_completed(
                     run_id=run_id,
                     output_data = result.output_data or {}

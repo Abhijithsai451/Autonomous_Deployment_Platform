@@ -6,7 +6,6 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm.exc import StaleDataError
 
 from apps.agent_runtime.api import health
-from apps.agent_runtime.api.health import router
 from apps.agent_runtime.infrastructure.agent_runtime_nats_client import agent_nats_client as nats
 from apps.agent_runtime.infrastructure.outbox_publisher import agent_outbox_publisher
 from apps.agent_runtime.infrastructure.struct_logger import struct_logger as logger

@@ -21,7 +21,7 @@ class ProcessedEventsRepository:
             is not None
             )
 
-    def mark_processed(self, event_id: str, consumer_group: str)-> ProcessedEvent:
+    def mark_processed(self, event_id: UUID, consumer_group: str)-> ProcessedEvent:
         processed_event = ProcessedEvent(
             event_id = event_id,
             consumer_group=consumer_group,

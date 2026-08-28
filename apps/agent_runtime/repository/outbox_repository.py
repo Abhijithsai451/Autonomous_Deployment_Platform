@@ -26,3 +26,15 @@ class OutboxRepository:
         self.db.add(outbox_event)
         self.db.flush()
         return outbox_event
+
+    def get_by_id(self, outbox_id: UUID) -> Optional[OutboxEvent]:
+        return self.db.query(OutboxEvent).filter(OutboxEvent.id == outbox_id).first()
+
+    def get_latest_by_aggregate(self, aggregate_id: UUID) -> Optional[OutboxEvent]:
+        return (
+            self.db.query(OutboxEvent)
+            .filter(OutboxEvent.aggregate_id == aggregate_id)
+            .order_by(OutboxEvent.created_at.desc())
+            .first()
+        )
+
