@@ -16,7 +16,7 @@ class Orchestrator:
         self.db = db
         self.agent_repo = AgentRepository(db)
         self.run_repo = AgentRunsRepository(db)
-        self.run_repo = OutboxRepository(db)
+        self.outbox_repo = OutboxRepository(db)
         self.execution_service = AgentExecutionService(db)
 
     def process_task(self, task_id: UUID, workflow_instance_id: UUID, agent_slug: str, input_data: Dict[str, Any])-> None:

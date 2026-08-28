@@ -20,12 +20,13 @@ def handle_task_ready_event(db:Session, payload: Dict[str,Any], metadata: Dict[s
         return False
 
     event_id = UUID(event_id_str)
+    logger.info("checking for the event processed ")
     processed_repo = ProcessedEventsRepository(db)
 
     if processed_repo.is_processed(event_id=event_id, consumer_group=CONSUMER_GROUP):
         logger.info("Duplicate Event and is Ignored", event_id = event_id_str, consumer_group=CONSUMER_GROUP )
         return True
-
+    logger.info("Event ID is not in processed_events . Creating a new event")
     try:
         task_id = UUID(payload["task_id"])
         workflow_instance_id = UUID(payload["workflow_instance_id"])
@@ -33,16 +34,18 @@ def handle_task_ready_event(db:Session, payload: Dict[str,Any], metadata: Dict[s
         input_data = payload.get("input_data", {})
 
         orchestrator = Orchestrator(db)
+
         orchestrator.process_task(
             task_id = task_id,
             workflow_instance_id=workflow_instance_id,
             agent_slug=agent_slug,
             input_data=input_data,
         )
+        logger.info("Processing the task from the orchestrator payload.")
         processed_repo.mark_processed(event_id, CONSUMER_GROUP)
         db.commit()
         logger.info("Successfully processed task event", event_id= str(event_id), task_id= str(task_id))
-        return True,
+        return True
     except Exception as e:
         db.rollback()
         logger.error("Failed to process the task ready event",event_id= str(event_id),error = str(e) )
