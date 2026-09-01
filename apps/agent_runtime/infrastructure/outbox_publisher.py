@@ -3,7 +3,6 @@ from apps.agent_runtime.infrastructure.agent_runtime_nats_client import agent_na
 from apps.agent_runtime.infrastructure.database import agent_db_session
 from packages.messaging.outbox import OutboxPublisher
 
-
 class AgentRuntimeOutboxPublisher(OutboxPublisher):
     def __init__(self, poll_interval_seconds: float = 0.01, batch_size: int = 50):
         super().__init__(
