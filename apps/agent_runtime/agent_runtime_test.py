@@ -1,10 +1,14 @@
+from unittest.mock import AsyncMock
 from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
 from apps.agent_runtime.application.event_handlers import handle_task_ready_event
+from apps.agent_runtime.domain.agent_contract import AgentContext, AgentExecutionStatus
 from apps.agent_runtime.infrastructure.database import agent_db_session
 from apps.agent_runtime.infrastructure.struct_logger import struct_logger as logger
+from apps.agent_runtime.llm.base_client import BaseLLMClient, LLMResponse, ToolCall
+from apps.agent_runtime.llm.llm_agent import ReActLLMAgent
 from apps.agent_runtime.repository.agent_run_repository import AgentRunsRepository
 from apps.agent_runtime.repository.outbox_repository import OutboxRepository
 from apps.agent_runtime.repository.processed_events_repository import ProcessedEventsRepository
@@ -190,3 +194,93 @@ def test_global_tool_registry_instance():
     tool = global_tool_registry.get("json_transformer")
     assert tool is not None
     assert tool.name == "json_transformer"
+
+@pytest.fixture
+def mock_context():
+    return AgentContext(
+        run_id=uuid4(),
+        agent_id=uuid4(),
+        task_id=uuid4(),
+        workflow_instance_id=uuid4(),
+        input_data={"data": {"user_id": 42, "email": "test@cortexops.ai"}, "select_keys": ["user_id"]},
+        configuration={},
+    )
+
+@pytest.mark.asyncio
+async def test_react_agent_single_turn_completion(mock_context):
+    """Test agent completing execution without requesting tool calls."""
+    mock_llm = AsyncMock(spec=BaseLLMClient)
+    mock_llm.generate.return_value = LLMResponse(
+        content="Task processed successfully.",
+        tool_calls=[],
+        finish_reason="stop",
+    )
+
+    agent = ReActLLMAgent(llm_client=mock_llm, max_iterations=3)
+    result = await agent.execute_async(mock_context)
+
+    assert result.status == AgentExecutionStatus.COMPLETED
+    assert result.output_data["answer"] == "Task processed successfully."
+    assert result.output_data["iterations"] == 1
+    assert mock_llm.generate.call_count == 1
+
+@pytest.mark.asyncio
+async def test_react_agent_tool_invocation_loop(mock_context):
+    """Test agent requesting a tool call, receiving output, and finalizing answer."""
+    mock_llm = AsyncMock(spec=BaseLLMClient)
+
+    # Turn 1: LLM requests tool execution
+    # Turn 2: LLM processes tool response and returns final string
+    mock_llm.generate.side_effect = [
+        LLMResponse(
+            content=None,
+            tool_calls=[
+                ToolCall(
+                    id="call_123",
+                    tool_name="json_transformer",
+                    arguments={
+                        "data": {"user_id": 42, "email": "test@cortexops.ai"},
+                        "select_keys": ["user_id"],
+                    },
+                )
+            ],
+            finish_reason="tool_calls",
+        ),
+        LLMResponse(
+            content="Transformation complete: {'user_id': 42}",
+            tool_calls=[],
+            finish_reason="stop",
+        ),
+    ]
+
+    agent = ReActLLMAgent(llm_client=mock_llm, max_iterations=5)
+    result = await agent.execute_async(mock_context)
+
+    assert result.status == AgentExecutionStatus.COMPLETED
+    assert "user_id" in result.output_data["answer"]
+    assert result.output_data["iterations"] == 2
+    assert mock_llm.generate.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_react_agent_max_iterations_exceeded(mock_context):
+    """Test agent gracefully failing when max iterations are reached."""
+    mock_llm = AsyncMock(spec=BaseLLMClient)
+    mock_llm.generate.return_value = LLMResponse(
+        content=None,
+        tool_calls=[
+            ToolCall(
+                id="call_loop",
+                tool_name="json_transformer",
+                arguments={"data": {}},
+            )
+        ],
+        finish_reason="tool_calls",
+    )
+
+    agent = ReActLLMAgent(llm_client=mock_llm, max_iterations=2)
+    result = await agent.execute_async(mock_context)
+
+    assert result.status == AgentExecutionStatus.FAILED
+    assert result.error.code == "MAX_ITERATIONS_EXCEEDED"
+    assert mock_llm.generate.call_count == 2
