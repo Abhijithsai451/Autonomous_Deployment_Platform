@@ -48,11 +48,36 @@ class AgentRunsRepository:
             self.db.flush()
         return run
 
+    def mark_cancelled(self, run_id: UUID, reason: str = "Execution cancelled by caller") -> Optional[AgentRuns]:
+        run = self.get_by_id(run_id)
+        if run:
+            run.status = "CANCELLED"
+            run.error = {
+                "code": "TASK_CANCELLED",
+                "message": reason,
+                "retryable": False
+            }
+            run.completed_at = datetime.now(timezone.utc)
+            self.db.flush()
+        return run
     def mark_failed(self, run_id: UUID, error_data: Dict[str, Any]) -> Optional[AgentRuns]:
         run = self.get_by_id(run_id)
         if run:
             run.status = "FAILED"
             run.error = error_data
+            run.completed_at = datetime.now(timezone.utc)
+            self.db.flush()
+        return run
+
+    def mark_timeout(self, run_id: UUID, duration_ms: float) -> Optional[AgentRuns]:
+        run = self.get_by_id(run_id)
+        if run:
+            run.status = "TIMEOUT"
+            run.error = {
+                "code": "EXECUTION_TIMEOUT",
+                "message": f"Agent execution timed out after {duration_ms}ms",
+                "retryable": True
+            }
             run.completed_at = datetime.now(timezone.utc)
             self.db.flush()
         return run

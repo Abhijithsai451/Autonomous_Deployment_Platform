@@ -10,6 +10,7 @@ class AgentExecutionStatus(str, Enum):
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     TIMEOUT = "TIMEOUT"
+    CANCELLED = "CANCELLED"
 
 
 @dataclass

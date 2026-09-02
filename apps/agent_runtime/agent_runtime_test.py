@@ -8,6 +8,7 @@ from apps.agent_runtime.infrastructure.struct_logger import struct_logger as log
 from apps.agent_runtime.repository.agent_run_repository import AgentRunsRepository
 from apps.agent_runtime.repository.outbox_repository import OutboxRepository
 from apps.agent_runtime.repository.processed_events_repository import ProcessedEventsRepository
+from apps.agent_runtime.tools.tool_registry import ToolRegistryError, global_tool_registry, ToolRegistry
 
 
 @pytest.fixture
@@ -113,3 +114,79 @@ def test_vertical_slice_duplicate_event_handling(db: Session, task_event_data: d
     duplicate_pass = handle_task_ready_event(db=db, payload=payload, metadata=metadata)
     assert duplicate_pass is True, "Duplicate event handling failed."
     logger.info("Assertion Passed: Duplicate Event safely ignored.")
+
+@pytest.fixture
+def registry():
+    """Provides a fresh instance of ToolRegistry populated with default tools."""
+    return ToolRegistry()
+
+
+def test_default_tools_and_schemas_registered(registry):
+    """Verify that default local tools are registered and return correct schemas."""
+    schemas = registry.get_all_schemas()
+    registered_names = [s["name"] for s in schemas]
+
+    assert "json_transformer" in registered_names
+    assert "task_reader" in registered_names
+    assert len(schemas) == 2
+
+
+def test_json_transformer_tool_execution(registry):
+    """Verify successful execution, key filtering, and key remapping for JSONTransformerTool."""
+    transform_input = {
+        "data": {
+            "user_id": 123,
+            "email_address": "test@cortexops.ai",
+            "internal_flag": True,
+        },
+        "select_keys": ["user_id", "email_address"],
+        "remap_keys": {"email_address": "user_email"},
+    }
+
+    result = registry.execute_tool(
+        tool_name="json_transformer",
+        parameters=transform_input,
+        context_metadata={"execution_source": "pytest_phase3"},
+    )
+
+    assert result.success is True
+    assert result.error is None
+    assert result.result["transformed_data"] == {
+        "user_id": 123,
+        "user_email": "test@cortexops.ai",
+    }
+    assert result.result["keys_processed"] == 2
+    assert result.execution_duration_ms > 0.0
+
+
+def test_task_reader_tool_validation_failure(registry):
+    """Verify safe error handling boundary when required parameters are missing."""
+    invalid_input = {
+        "payload": {"action": "deploy"},
+        "required_fields": ["action", "target_env"],  # 'target_env' is missing
+    }
+
+    result = registry.execute_tool(
+        tool_name="task_reader",
+        parameters=invalid_input,
+    )
+
+    assert result.success is False
+    assert result.result is None
+    assert "Missing required fields" in result.error
+    assert "target_env" in result.error
+
+
+def test_unregistered_tool_resolution_raises_error(registry):
+    """Verify that resolving an unregistered tool name raises ToolRegistryError."""
+    with pytest.raises(ToolRegistryError) as exc_info:
+        registry.resolve("non_existent_tool")
+
+    assert "Tool 'non_existent_tool' is not registered" in str(exc_info.value)
+
+
+def test_global_tool_registry_instance():
+    """Verify global registry singleton is instantiated and contains standard tools."""
+    tool = global_tool_registry.get("json_transformer")
+    assert tool is not None
+    assert tool.name == "json_transformer"
