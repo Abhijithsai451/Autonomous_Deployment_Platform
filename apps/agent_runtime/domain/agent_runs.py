@@ -2,7 +2,7 @@ import enum
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import Column, UUID, ForeignKey, Enum, JSON, Text, DateTime
+from sqlalchemy import Column, UUID, ForeignKey, Enum, JSON, Text, DateTime, BigInteger
 from sqlalchemy.dialects.postgresql import JSONB
 
 from apps.agent_runtime.infrastructure.base import Base
@@ -36,3 +36,4 @@ class AgentRuns(Base):
     started_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    duration_ms = Column(BigInteger, default=0, nullable=True)

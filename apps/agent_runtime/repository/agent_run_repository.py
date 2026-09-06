@@ -39,12 +39,13 @@ class AgentRunsRepository:
             self.db.flush()
         return run
 
-    def mark_completed(self, run_id: UUID, output_data: Dict[str, Any]) -> Optional[AgentRuns]:
+    def mark_completed(self, run_id: UUID, output_data: Dict[str, Any], duration_ms) -> Optional[AgentRuns]:
         run = self.get_by_id(run_id)
         if run:
             run.status = RunStatus.COMPLETED
             run.output_data = output_data
             run.completed_at = datetime.now(timezone.utc)
+            run.duration_ms = duration_ms
             self.db.flush()
         return run
 
@@ -60,12 +61,13 @@ class AgentRunsRepository:
             run.completed_at = datetime.now(timezone.utc)
             self.db.flush()
         return run
-    def mark_failed(self, run_id: UUID, error_data: Dict[str, Any]) -> Optional[AgentRuns]:
+    def mark_failed(self, run_id: UUID, error_data: Dict[str, Any],duration_ms) -> Optional[AgentRuns]:
         run = self.get_by_id(run_id)
         if run:
             run.status = RunStatus.FAILED
             run.error = error_data
             run.completed_at = datetime.now(timezone.utc)
+            run.duration_ms = duration_ms
             self.db.flush()
         return run
 

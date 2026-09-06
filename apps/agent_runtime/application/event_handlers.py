@@ -91,6 +91,7 @@ def handle_task_ready_event(
         run_repo.mark_completed(
             run_id=agent_run.id,
             output_data=agent_result.output_data or {},
+            duration_ms = execution_duration_ms
         )
     else:
         error_dict = {
@@ -100,7 +101,7 @@ def handle_task_ready_event(
         run_repo.mark_failed(
             run_id=agent_run.id,
             error=error_dict,
-
+            duration_ms = execution_duration_ms
         )
 
     # 5. Stage Outbox Event & Record Idempotency Entry
