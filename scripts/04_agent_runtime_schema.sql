@@ -40,7 +40,8 @@ CREATE TABLE agent_runtime.agent_runs (
     error JSONB,
     started_at TIMESTAMPTZ,
     completed_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    duration_ms BIGINT
 );
 
 CREATE TABLE agent_runtime.outbox_events (
