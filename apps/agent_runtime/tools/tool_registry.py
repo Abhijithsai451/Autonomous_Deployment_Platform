@@ -62,5 +62,4 @@ class ToolRegistry:
         return [tool.get_schema() for tool in self._tools.values()]
 
 
-# Global singleton instance for easy import across the agent runtime
 global_tool_registry = ToolRegistry()
