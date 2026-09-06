@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 import os
 from typing import Any, Dict, Optional
 from uuid import UUID
-import nest_asyncio
+
 
 from sqlalchemy.orm import Session
 
@@ -77,6 +77,7 @@ def handle_task_ready_event(
         loop = None
 
     if loop and loop.is_running():
+        import nest_asyncio
         nest_asyncio.apply()
         agent_result = loop.run_until_complete(agent.execute_async(context))
     else:
@@ -90,7 +91,6 @@ def handle_task_ready_event(
         run_repo.mark_completed(
             run_id=agent_run.id,
             output_data=agent_result.output_data or {},
-            duration_ms=execution_duration_ms,
         )
     else:
         error_dict = {
@@ -100,7 +100,7 @@ def handle_task_ready_event(
         run_repo.mark_failed(
             run_id=agent_run.id,
             error=error_dict,
-            duration_ms=execution_duration_ms,
+
         )
 
     # 5. Stage Outbox Event & Record Idempotency Entry
