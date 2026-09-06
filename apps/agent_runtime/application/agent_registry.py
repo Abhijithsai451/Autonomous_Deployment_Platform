@@ -3,7 +3,7 @@ from uuid import UUID
 
 from apps.agent_runtime.agents.test_agent import TestAgent
 from apps.agent_runtime.domain.agent_contract import BaseAgent
-from apps.agent_runtime.domain.agents import Agent
+from apps.agent_runtime.domain.agents import Agent, AgentStatus
 from apps.agent_runtime.infrastructure.struct_logger import struct_logger as logger
 from apps.agent_runtime.repository.agent_repository import AgentRepository
 
@@ -39,7 +39,7 @@ class AgentRegistry:
             if hasattr(agent_record.status, "value")
             else str(agent_record.status)
         )
-        if status_value != "ACTIVE":
+        if status_value != AgentStatus.ACTIVE:
             raise AgentRegistryError(f"Agent with slug {slug} is  disabled (status = {agent_record.status}")
         agent_cls = self._registry.get(slug)
         if not agent_cls:

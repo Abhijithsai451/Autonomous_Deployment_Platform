@@ -8,15 +8,13 @@ from sqlalchemy.dialects.postgresql import JSONB
 from apps.agent_runtime.infrastructure.base import Base
 
 
-class AgentStatus(enum.Enum):
-    ACTIVE = "ACTIVE"
-    DISABLED = "DISABLED"
-
 class RunStatus(enum.Enum):
     PENDING = "PENDING"
     RUNNING = "RUNNING"
     COMPLETED = "COMPLETED"
+    CANCELED = "CANCELED"
     FAILED = "FAILED"
+    TIMEOUT = "TIMEOUT"
 
 class AgentRuns(Base):
     __tablename__ = "agent_runs"

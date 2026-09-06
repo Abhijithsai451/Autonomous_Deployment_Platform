@@ -18,7 +18,7 @@ class OutboxRepository:
             aggregate_type=aggregate_type,
             aggregate_id=aggregate_id,
             payload=payload,
-            status="PENDING",
+            status=OutboxStatus.PENDING,
             retry_count=0,
             max_retries=5,
             created_at=datetime.now(timezone.utc)

@@ -1,10 +1,12 @@
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 import pytest
+from sqlalchemy import Text
 from sqlalchemy.orm import Session
 
 from apps.agent_runtime.application.event_handlers import handle_task_ready_event
 from apps.agent_runtime.domain.agent_contract import AgentContext, AgentExecutionStatus
+from apps.agent_runtime.domain.agents import Agent, AgentStatus
 from apps.agent_runtime.infrastructure.database import agent_db_session
 from apps.agent_runtime.infrastructure.struct_logger import struct_logger as logger
 from apps.agent_runtime.llm.base_client import BaseLLMClient, LLMResponse, ToolCall
@@ -26,7 +28,23 @@ def db():
 
 
 @pytest.fixture
-def task_event_data():
+def test_agent(db: Session):
+    """Seed the database with a test agent using the repository helper."""
+    # Call your new agentRepository helper function here
+    agent = Agent(
+        db=db,
+        name="Test Agent",
+        status = AgentStatus.ACTIVE,
+    )
+    if hasattr(agent, "slug"):
+        agent.slug = "test-agent-1"
+
+    db.add(agent)
+    db.flush()
+    return agent
+
+@pytest.fixture
+def task_event_data(test_agent: Agent):
     event_id = uuid4()
     task_id = uuid4()
     workflow_instance_id = uuid4()
@@ -35,7 +53,7 @@ def task_event_data():
         "event_id": str(event_id),
         "task_id": str(task_id),
         "workflow_instance_id": str(workflow_instance_id),
-        "agent_slug": "test-agent-1",
+        "agent_slug": test_agent.slug,
         "input_data": {
             "action_type": "execute",
             "input_reference": str(uuid4()),
@@ -54,6 +72,7 @@ def task_event_data():
         "workflow_instance_id": workflow_instance_id,
         "payload": payload,
         "metadata": metadata,
+        "agent_id": getattr(test_agent, "agent_id", getattr(test_agent, "id", None)),
     }
 
 
@@ -63,44 +82,61 @@ def test_vertical_slice_event_processing(db: Session, task_event_data: dict):
     task_id = task_event_data["task_id"]
     event_id = task_event_data["event_id"]
 
-    logger.info("Executing Test 1: Processing new task event...", event_id=str(event_id))
+    logger.info("Executing Test 1: Processing task event via ReAct Agent...", event_id=str(event_id))
 
-    # 1. Execute Event Handler
-    success = handle_task_ready_event(db=db, payload=payload, metadata=metadata)
-    assert success is True, "Event processing returned False instead of True"
+    mock_llm_response = LLMResponse(
+        content="Task processed successfully via ReAct loop.",
+        tool_calls=[],
+        finish_reason="stop",
+    )
+
+    with patch("apps.agent_runtime.application.event_handlers.OpenAILLMClient") as mock_client_cls:
+        mock_client_instance = AsyncMock()
+        mock_client_instance.generate.return_value = mock_llm_response
+        mock_client_cls.return_value = mock_client_instance
+
+        # 1. Execute Event Handler with mock API key
+        success = handle_task_ready_event(
+            db=db,
+            payload=payload,
+            metadata=metadata,
+            api_key="mock-openai-key"
+        )
+        assert success is True, "Event processing returned False instead of True"
 
     run_repo = AgentRunsRepository(db)
     outbox_repo = OutboxRepository(db)
     processed_repo = ProcessedEventsRepository(db)
-    logger.info("Verified DB Assertions")
 
-    # 2. Verify AgentRun Record
+    # 2. Verify AgentRun Record State
     run = run_repo.get_by_task_id(task_id)
     assert run is not None, "AgentRun record was not created in the database."
 
     run_status_str = run.status.value if hasattr(run.status, "value") else str(run.status)
     assert run_status_str == "COMPLETED", f"Expected COMPLETED status, got '{run.status}'."
-    assert run.output_data.get("message").lower() == "testagent executed successfully"
-    logger.info("Assertion Passed: AgentRun created with COMPLETED status.", run_id=str(run.id))
+    assert "answer" in run.output_data
+    assert run.output_data["answer"] == "Task processed successfully via ReAct loop."
+    logger.info("Assertion Passed: AgentRun created with COMPLETED status and ReAct output.", run_id=str(run.id))
 
+    # 3. Verify Idempotency Record
     is_processed = processed_repo.is_processed(
         event_id=event_id,
         consumer_group="agent-runtime-task-consumer"
     )
     assert is_processed is True, "Event was not recorded in processed_events table."
-    logger.info("Assertion Passed: ProcessedEvent Record Verified")
 
+    # 4. Verify Outbox Staging
     outbox_event = outbox_repo.get_latest_by_aggregate(run.id)
     assert outbox_event is not None, "Outbox event was not created."
 
-    actual_event_type = outbox_event.event_type.value if hasattr(outbox_event.event_type, "value") else str(outbox_event.event_type)
+    actual_event_type = outbox_event.event_type.value if hasattr(outbox_event.event_type, "value") else str(
+        outbox_event.event_type)
     actual_status = outbox_event.status.value if hasattr(outbox_event.status, "value") else str(outbox_event.status)
 
     assert actual_event_type.strip() == "agent_runtime.events.agent.finished", f"Unexpected event_type: '{actual_event_type}'"
     assert actual_status in ("PENDING", "PUBLISHED"), f"Unexpected outbox status: '{actual_status}'"
 
-    logger.info("Assertion Passed: OutboxEvent verified.", outbox_id=str(outbox_event.id))
-    logger.info("Assertion Passed: Event pipeline executed successfully.")
+    logger.info("Assertion Passed: Full vertical slice verified end-to-end.")
 
 
 def test_vertical_slice_duplicate_event_handling(db: Session, task_event_data: dict):
@@ -110,14 +146,26 @@ def test_vertical_slice_duplicate_event_handling(db: Session, task_event_data: d
 
     logger.info("Executing Test 2: Simulating duplicate event retry...", event_id=str(event_id))
 
-    # Initial Run
-    first_pass = handle_task_ready_event(db=db, payload=payload, metadata=metadata)
-    assert first_pass is True
+    mock_llm_response = LLMResponse(
+        content="Task processed successfully via ReAct loop.",
+        tool_calls=[],
+        finish_reason="stop",
+    )
 
-    # Duplicate Retry
-    duplicate_pass = handle_task_ready_event(db=db, payload=payload, metadata=metadata)
-    assert duplicate_pass is True, "Duplicate event handling failed."
-    logger.info("Assertion Passed: Duplicate Event safely ignored.")
+    with patch("apps.agent_runtime.application.event_handlers.OpenAILLMClient") as mock_client_cls:
+        mock_client_instance = AsyncMock()
+        mock_client_instance.generate.return_value = mock_llm_response
+        mock_client_cls.return_value = mock_client_instance
+
+        # Initial Run
+        first_pass = handle_task_ready_event(db=db, payload=payload, metadata=metadata, api_key="mock-key")
+        assert first_pass is True
+
+        # Duplicate Retry
+        duplicate_pass = handle_task_ready_event(db=db, payload=payload, metadata=metadata, api_key="mock-key")
+        assert duplicate_pass is True, "Duplicate event handling failed."
+        logger.info("Assertion Passed: Duplicate Event safely ignored.")
+
 
 @pytest.fixture
 def registry():
@@ -195,6 +243,7 @@ def test_global_tool_registry_instance():
     assert tool is not None
     assert tool.name == "json_transformer"
 
+
 @pytest.fixture
 def mock_context():
     return AgentContext(
@@ -205,6 +254,7 @@ def mock_context():
         input_data={"data": {"user_id": 42, "email": "test@cortexops.ai"}, "select_keys": ["user_id"]},
         configuration={},
     )
+
 
 @pytest.mark.asyncio
 async def test_react_agent_single_turn_completion(mock_context):
@@ -223,6 +273,7 @@ async def test_react_agent_single_turn_completion(mock_context):
     assert result.output_data["answer"] == "Task processed successfully."
     assert result.output_data["iterations"] == 1
     assert mock_llm.generate.call_count == 1
+
 
 @pytest.mark.asyncio
 async def test_react_agent_tool_invocation_loop(mock_context):
