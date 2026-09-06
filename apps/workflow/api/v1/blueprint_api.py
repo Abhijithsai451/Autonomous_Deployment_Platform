@@ -9,8 +9,8 @@ from apps.workflow.application.blueprint_service import BlueprintService
 from apps.workflow.infrastructure.database import workflow_db_session
 from packages.auth.auth_jwt import get_current_user
 
-router = APIRouter(prefix="/blueprints", tags=["Workflow Blueprints"], dependencies=[Depends(get_current_user)])
-
+#router = APIRouter(prefix="/blueprints", tags=["Workflow Blueprints"], dependencies=[Depends(get_current_user)])
+router = APIRouter(prefix="/blueprints", tags=["Workflow Blueprints"])
 
 class CreateBlueprintSchema(BaseModel):
     name: str

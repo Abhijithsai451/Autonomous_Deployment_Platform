@@ -4,9 +4,9 @@ This platform is a high-performance, microservice-oriented platform designed for
 
 ## Overview
 
-CortexOps is built using a modular "apps" architecture, separating concerns across identity, organization management, workflow execution, and agent runtimes. The project follows Domain-Driven Design (DDD) principles, with shared logic encapsulated in internal packages.
+Project is built using a modular "apps" architecture, separating concerns across identity, organization management, workflow execution, and agent runtimes. The project follows Domain-Driven Design (DDD) principles, with shared logic encapsulated in internal packages.
 
-## 🛠 Tech Stack
+## Tech Stack
 
 - **Language:** Python 3.10+
 - **Frameworks:** FastAPI (API Layer), SQLAlchemy (ORM), Pydantic (Data Validation)

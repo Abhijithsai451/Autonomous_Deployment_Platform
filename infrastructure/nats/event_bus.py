@@ -57,6 +57,13 @@ class EventBus:
         full_subject = (
             subject if "." in subject else f"{self.subject_prefix}.{subject}"
         )
+        target_stream = stream or self.stream_name
+
+        # Auto-ensure target stream before creating subscription
+        await self.client.ensure_stream(
+            stream_name=target_stream,
+            subjects=[f"{full_subject.split('.')[0]}.>"]
+        )
         await self.subscriber.subscribe(
             stream=stream,
             subject=full_subject,

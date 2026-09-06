@@ -6,7 +6,8 @@ from apps.workflow.application.timeline_service import TimelineService
 from apps.workflow.infrastructure.database import workflow_db_session
 from packages.auth.auth_jwt import get_current_user
 
-router = APIRouter(prefix="/instances", tags=["Timeline"], dependencies=[Depends(get_current_user)])
+#router = APIRouter(prefix="/instances", tags=["Timeline"], dependencies=[Depends(get_current_user)])
+router = APIRouter(prefix="/instances", tags=["Timeline"])
 
 @router.get("/{id}/timeline")
 def get_instance_timeline(id: UUID, db: Session = Depends(workflow_db_session)):

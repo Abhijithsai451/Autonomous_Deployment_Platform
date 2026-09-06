@@ -11,6 +11,8 @@ sqlalchemy
 pyjwt
 # Messaging
 nats-py
+# LLM
+openai
 
 # Observability & Evaluation
 opentelemetry-api

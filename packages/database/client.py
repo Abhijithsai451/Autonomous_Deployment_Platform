@@ -27,10 +27,19 @@ class DatabaseClient:
         with self.engine.begin() as conn:
             conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {self.schema_name}"))
 
+    def check_health(self) -> bool:
+        """Executes a ping query to verify database connection viability."""
+        with self.engine.connect() as conn:
+            result = conn.execute(text("SELECT 1"))
+            return result.scalar() == 1
+
     def get_session(self)-> Generator[Session, None, None]:
         """Dependency Provider for FastAPI route injection"""
         db = self.SessionLocal()
         try:
             yield db
+        except Exception:
+            db.rollback()
+            raise
         finally:
             db.close()
