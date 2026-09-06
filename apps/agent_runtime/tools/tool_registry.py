@@ -1,5 +1,4 @@
 from typing import Dict, Optional, Any, List
-
 from apps.agent_runtime.infrastructure.struct_logger import struct_logger as logger
 from apps.agent_runtime.tools.base import BaseTool, ToolOutput, ToolInput
 from apps.agent_runtime.tools.local_tools import JSONTransformerTool, TaskReaderTool

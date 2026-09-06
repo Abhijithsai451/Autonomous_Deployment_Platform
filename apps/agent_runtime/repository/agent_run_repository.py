@@ -4,7 +4,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from apps.agent_runtime.domain.agent_runs import AgentRuns
+from apps.agent_runtime.domain.agent_runs import AgentRuns, RunStatus
 
 
 class AgentRunsRepository:
@@ -17,7 +17,7 @@ class AgentRunsRepository:
             agent_id = agent_id,
             task_id = task_id,
             workflow_instance_id = workflow_instance_id,
-            status = "PENDING",
+            status = RunStatus.PENDING,
             input_data = input_data,
             created_at= datetime.now(timezone.utc),
         )
@@ -34,7 +34,7 @@ class AgentRunsRepository:
     def mark_running(self, run_id: UUID) -> Optional[AgentRuns]:
         run = self.get_by_id(run_id)
         if run:
-            run.status = "RUNNING"
+            run.status = RunStatus.RUNNING
             run.started_at = datetime.now(timezone.utc)
             self.db.flush()
         return run
@@ -42,7 +42,7 @@ class AgentRunsRepository:
     def mark_completed(self, run_id: UUID, output_data: Dict[str, Any]) -> Optional[AgentRuns]:
         run = self.get_by_id(run_id)
         if run:
-            run.status = "COMPLETED"
+            run.status = RunStatus.COMPLETED
             run.output_data = output_data
             run.completed_at = datetime.now(timezone.utc)
             self.db.flush()
@@ -51,7 +51,7 @@ class AgentRunsRepository:
     def mark_cancelled(self, run_id: UUID, reason: str = "Execution cancelled by caller") -> Optional[AgentRuns]:
         run = self.get_by_id(run_id)
         if run:
-            run.status = "CANCELLED"
+            run.status = RunStatus.CANCELED
             run.error = {
                 "code": "TASK_CANCELLED",
                 "message": reason,
@@ -63,7 +63,7 @@ class AgentRunsRepository:
     def mark_failed(self, run_id: UUID, error_data: Dict[str, Any]) -> Optional[AgentRuns]:
         run = self.get_by_id(run_id)
         if run:
-            run.status = "FAILED"
+            run.status = RunStatus.FAILED
             run.error = error_data
             run.completed_at = datetime.now(timezone.utc)
             self.db.flush()
@@ -72,7 +72,7 @@ class AgentRunsRepository:
     def mark_timeout(self, run_id: UUID, duration_ms: float) -> Optional[AgentRuns]:
         run = self.get_by_id(run_id)
         if run:
-            run.status = "TIMEOUT"
+            run.status = RunStatus.TIMEOUT
             run.error = {
                 "code": "EXECUTION_TIMEOUT",
                 "message": f"Agent execution timed out after {duration_ms}ms",
