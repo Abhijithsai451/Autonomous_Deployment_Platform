@@ -4,6 +4,7 @@ from typing import Any, Dict, Optional
 
 from infrastructure.nats.nats_client import NatsClient
 from packages.logging.structured_logs import struc_logger as logger
+from packages.telemetry.nats import inject_nats_headers
 
 
 class Publisher:
@@ -24,7 +25,7 @@ class Publisher:
             "Nats-Msg-Id": idempotency_key or str(uuid.uuid4()),
             "event_type": event_type or subject.split(".")[-1]
         }
-
+        headers = inject_nats_headers(headers)
         data = json.dumps(payload).encode("utf-8")
         ack = await self.client.js.publish(subject, data, headers=headers)
         logger.debug(f"Published to '{subject}' [seq={ack.stream}:{ack.seq}]")

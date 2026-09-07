@@ -4,9 +4,9 @@ set -e
 NETWORK_NAME="cortexops_shared_network"
 INFRA_COMPOSE="infrastructure/docker/docker-compose.infra.yml"
 APPS_COMPOSE="infrastructure/docker/docker-compose.apps.yml"
-
+MONITOR_COMPOSE="infrastructure/docker/docker-compose.monitoring.yml"
 # ==============================================================================
-# 📋 MICROSERVICES
+#  MICROSERVICES
 # ==============================================================================
 SERVICES=(
     "Identity Service      : 8000 : cortexops_identity      : apps/identity/identity_test.py"
@@ -22,7 +22,7 @@ SERVICES=(
 test_health() {
     local service_name=$1
     local url=$2
-    echo -n "⏳ Waiting for $service_name to accept connections ($url)..."
+    echo -n " Waiting for $service_name to accept connections ($url)..."
 
     local attempts=0
     local max_attempts=5
@@ -31,7 +31,7 @@ test_health() {
         sleep 2
         attempts=$((attempts + 1))
         if [ $attempts -eq $max_attempts ]; then
-            echo -e "\n❌ Timeout: $service_name failed to respond at $url!"
+            echo -e "\n Timeout: $service_name failed to respond at $url!"
             exit 1
         fi
     done
@@ -44,26 +44,29 @@ echo "========================================="
 
 # 1. Ensure the shared network exists before starting services
 if ! docker network inspect "$NETWORK_NAME" >/dev/null 2>&1; then
-    echo "🌐 Creating shared external network: $NETWORK_NAME..."
+    echo " Creating shared external network: $NETWORK_NAME..."
     docker network create "$NETWORK_NAME"
 else
-    echo "🌐 Shared network '$NETWORK_NAME' already exists."
+    echo " Shared network '$NETWORK_NAME' already exists."
 fi
 
 # 2. Launch Core Infrastructure Frameworks (Postgres, NATS, Keycloak, Redis)
-echo "🏗️  Launching Core Infrastructure (Databases & Brokers)..."
+echo "  Launching Core Infrastructure (Databases & Brokers)..."
 docker compose --env-file .env -f "$INFRA_COMPOSE" up -d
 
-echo "⏳ Waiting a few seconds for core services to stabilize..."
+echo "  Launching Core Monitoring Systems (Messaging, Telemetry, Traces)..."
+docker compose --env-file .env -f "$MONITOR_COMPOSE" up -d
+
+echo " Waiting a few seconds for core services to stabilize..."
 sleep 2
 
 # 3. Launch Application Services (Identity , Audit, Workflow etc.)
-echo "⚡ Launching Application Services..."
+echo " Launching Application Services..."
 docker compose --env-file .env -f "$APPS_COMPOSE" up --build -d
 
 # 4. Loop: Dynamically wait for ALL active services to be healthy
 echo "========================================="
-echo "🔍 Performing Health & Verification Checks"
+echo " Performing Health & Verification Checks"
 echo "========================================="
 for service in "${SERVICES[@]}"; do
     # Parse the colon-separated values, stripping surrounding whitespace
@@ -76,7 +79,7 @@ done
 
 # 5. Loop: Dynamically run unit tests for ALL services
 echo "========================================="
-echo "🧪 Running Service Unit Tests"
+echo " Running Service Unit Tests"
 echo "========================================="
 for service in "${SERVICES[@]}"; do
     IFS=":" read -r name port container test_path <<< "$service"
@@ -92,8 +95,8 @@ for service in "${SERVICES[@]}"; do
 done
 
 echo "========================================="
-echo "🎉 All systems are online and verified!"
+echo " All systems are online and verified!"
 echo "========================================="
-echo "💡 To view logs, run: docker compose -f $APPS_COMPOSE logs -f"
+echo " To view logs, run: docker compose -f $APPS_COMPOSE logs -f"
 
 

@@ -6,6 +6,8 @@ set -e
 # Configuration Paths
 INFRA_COMPOSE="infrastructure/docker/docker-compose.infra.yml"
 APPS_COMPOSE="infrastructure/docker/docker-compose.apps.yml"
+MONITOR_COMPOSE="infrastructure/docker/docker-compose.monitoring.yml"
+
 SEED_DATABASE="scripts/seed_databases.sh"
 if [ "$1" = "--clean" ]; then
     echo "=========================================="
@@ -16,6 +18,7 @@ if [ "$1" = "--clean" ]; then
     echo "Stopping all containers..."
     docker compose -f "$INFRA_COMPOSE" down -v
     docker compose -f "$APPS_COMPOSE" down -v
+    docker compose -f "$MONITOR_COMPOSE" down -v
 
     # 2. Prune the build cache (Forces docker to read local files fresh)
     echo "Pruning Docker builder cache..."
@@ -39,6 +42,7 @@ else
     echo "Removing containers and volumes (-v)..."
     docker compose -f "$INFRA_COMPOSE" down -v
     docker compose -f "$APPS_COMPOSE" down -v
+    docker compose -f "$MONITOR_COMPOSE" down -v
 
     # 2. Fire up the startup runner script clean
     if [ -f "./run.sh" ]; then
@@ -46,7 +50,7 @@ else
         ./run.sh
 
     else
-        echo "❌ Error: ./run.sh not found in the current directory!"
+        echo " Error: ./run.sh not found in the current directory!"
         exit 1
     fi
 fi
