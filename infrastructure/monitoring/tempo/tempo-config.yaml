@@ -24,5 +24,3 @@ storage:
       path: /tmp/tempo/wal
     local:
       path: /tmp/tempo/blocks
-
-search_enabled: true

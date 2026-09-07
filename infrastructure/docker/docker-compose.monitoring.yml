@@ -1,7 +1,4 @@
-version: '3.8'
-
 services:
-  # 1. OpenTelemetry Collector
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.95.0
     container_name: cortexops_otel_collector
@@ -50,8 +47,8 @@ services:
     volumes:
       - ../monitoring/tempo/tempo-config.yaml:/etc/tempo-config.yaml
     ports:
-      - "3200:3200"   # Tempo HTTP search / UI
-      - "4317"        # OTLP gRPC internal ingestion
+      - "3200:3200"
+      - "4317"
     networks:
       - shared_network
 
