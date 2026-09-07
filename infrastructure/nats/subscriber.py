@@ -6,6 +6,9 @@ from packages.events.base import BaseEvent
 from packages.events.context import RequestContext
 from packages.events.serializer import EventSerializer
 from packages.logging.structured_logs import struc_logger as logger
+from packages.telemetry.nats import extract_nats_headers
+from packages.telemetry.test_telemetry import tracer
+
 
 class Subscriber:
     def __init__(self, client: NatsClient):
@@ -34,38 +37,41 @@ class Subscriber:
             await self.client.connect()
 
         async def _msg_handler(msg):
-            try:
-                if handler is None:
-                    typed_event, envelope = EventSerializer.deserialize_event(msg.data)
-                    RequestContext.set(
-                        correlation_id=envelope.correlation_id,
-                        tenant_id=envelope.tenant_id,
-                        causation_id=envelope.message_id
-                    )
+            msg_headers = dict(msg.headers) if msg.headers else {}
+            parent_ctx = extract_nats_headers(msg_headers)  # <-- ADDED
 
-                    registered_handler = self._event_handlers.get(type(typed_event))
-                    if registered_handler:
-                        await registered_handler(typed_event)
+            # Wrap consumer execution in a child span linked to publisher
+            with tracer.start_as_current_span(f"nats.consume.{subject}", context=parent_ctx):  # <-- ADDED
+                try:
+                    if handler is None:
+                        typed_event, envelope = EventSerializer.deserialize_event(msg.data)
+                        RequestContext.set(
+                            correlation_id=envelope.correlation_id,
+                            tenant_id=envelope.tenant_id,
+                            causation_id=envelope.message_id
+                        )
+
+                        registered_handler = self._event_handlers.get(type(typed_event))
+                        if registered_handler:
+                            await registered_handler(typed_event)
+                        else:
+                            logger.warning(f"No handler registered for typed event '{typed_event.event_name}'")
                     else:
-                        logger.warning(f"No handler registered for typed event '{typed_event.event_name}'")
-                else:
-                    # Legacy / fallback raw dict handler
-                    raw_payload = json.loads(msg.data.decode("utf-8"))
-                    metadata = {
-                        "subject": msg.subject,
-                        "headers": dict(msg.headers) if msg.headers else {},
-                        "reply": msg.reply
-                    }
-                    await handler(raw_payload, metadata)
+                        raw_payload = json.loads(msg.data.decode("utf-8"))
+                        metadata = {
+                            "subject": msg.subject,
+                            "headers": msg_headers,
+                            "reply": msg.reply
+                        }
+                        await handler(raw_payload, metadata)
 
-                    # Acknowledge message only after successful processing
-                await msg.ack()
+                    await msg.ack()
 
-            except Exception as e:
-                logger.error(
-                    f"Error handling message on subject '{subject}': {e}",
-                    exc_info=True
-                )
+                except Exception as e:
+                    logger.error(
+                        f"Error handling message on subject '{subject}': {e}",
+                        exc_info=True
+                    )
 
         sub = await self.client.js.subscribe(
             subject=subject,
