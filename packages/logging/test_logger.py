@@ -17,3 +17,13 @@ logger.info(
     headers={"authorization": "Bearer secret-token-123", "x-api-key": "key-xyz"},
     payload={"password": "my_password", "query": "label:inbox"}
 )
+
+"""
+docker run --rm -it \
+  -v "$PWD":/app \
+  -w /app \
+  -e PYTHONPATH=/app \
+  python:3.10 \
+  bash -lc "pip install -r requirements.txt && python packages/logging/test_logger.py"
+
+"""

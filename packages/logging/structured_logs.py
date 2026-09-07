@@ -5,7 +5,7 @@ from typing import Dict, Optional
 import structlog
 from typing_extensions import Any
 
-from packages.logging.src.redaction.redactor import redact_sensitive_middleware
+from packages.logging.redaction.redactor import redact_sensitive_middleware
 
 
 class StructuredLogger:
