@@ -5,6 +5,8 @@ from typing import Dict, Optional
 import structlog
 from typing_extensions import Any
 
+from packages.logging.src.redaction.redactor import redact_sensitive_middleware
+
 
 class StructuredLogger:
     """
@@ -39,6 +41,7 @@ class StructuredLogger:
                 structlog.stdlib.add_log_level,
                 structlog.processors.TimeStamper(fmt="iso", utc=True),
                 structlog.processors.dict_tracebacks,
+                redact_sensitive_middleware,
                 structlog.processors.JSONRenderer(),
             ],
             context_class=dict,

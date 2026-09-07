@@ -21,7 +21,7 @@ async def identity_lifespan(app: FastAPI):
     await nats.shutdown()
     logger.info("NATS Messaging Core successfully disconnected.")
 
-app = FastAPI(title="CortexOps Identity Service", lifespan=identity_lifespan)
+app = FastAPI(title="ADD Platform Identity Service", lifespan=identity_lifespan)
 
 @app.api_route("/health",methods=["GET", "HEAD"], tags=["System"])
 async def health_check():
