@@ -44,7 +44,7 @@ async def workflow_lifespan(app: FastAPI):
     await nats.shutdown()
     logger.info("NATS Messaging Core successfully disconnected.")
 
-app = FastAPI(title="CortexOps Workflow Service", lifespan= workflow_lifespan)
+app = FastAPI(title="ADD Platform Workflow Service", lifespan= workflow_lifespan)
 
 @app.exception_handler(StaleDataError)
 async def stale_data_exception_handler(request: Request, exc: StaleDataError):

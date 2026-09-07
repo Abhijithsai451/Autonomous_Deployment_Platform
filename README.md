@@ -55,7 +55,7 @@ CortexOps/
 1. **Clone the repository:**
 ```shell script
 git clone <repository-url>
-   cd CortexOps
+   cd ADD Platform
 ```
 
 

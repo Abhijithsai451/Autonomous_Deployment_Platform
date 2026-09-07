@@ -25,7 +25,7 @@ async def agent_lifespan(app: FastAPI):
 
     await nats.shutdown()
     logger.info("NATS Messaging Core successfully disconnected from Agent Runtime.")
-app = FastAPI(title="CortexOps Agent Runtime Service", lifespan= agent_lifespan)
+app = FastAPI(title="ADD Platform Agent Runtime Service", lifespan= agent_lifespan)
 
 @app.exception_handler(StaleDataError)
 async def stale_data_exception_handler(request: Request, exc: StaleDataError):
