@@ -1,7 +1,4 @@
-version: '3.8'
-
 services:
-  # 1. OpenTelemetry Collector
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.95.0
     container_name: cortexops_otel_collector
@@ -30,7 +27,6 @@ services:
     networks:
       - shared_network
 
-  # 3. Loki (Logs)
   loki:
     image: grafana/loki:2.9.4
     container_name: cortexops_loki
@@ -42,7 +38,6 @@ services:
     networks:
       - shared_network
 
-  # 4. Tempo (Traces)
   tempo:
     image: grafana/tempo:2.3.1
     container_name: cortexops_tempo
@@ -50,21 +45,23 @@ services:
     volumes:
       - ../monitoring/tempo/tempo-config.yaml:/etc/tempo-config.yaml
     ports:
-      - "3200:3200"   # Tempo HTTP search / UI
-      - "4317"        # OTLP gRPC internal ingestion
+      - "3200:3200"
+      - "4317"
     networks:
       - shared_network
 
-  # 5. Grafana (Visualization UI)
   grafana:
     image: grafana/grafana:10.3.3
     container_name: cortexops_grafana
     environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_USER=superuser
+      - GF_SECURITY_ADMIN_PASSWORD=securepassword
       - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_DATABASE_WAL=true
+      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
     volumes:
       - ../monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ../monitoring/grafana/dashboards:/var/lib/grafana/dashboards
     ports:
       - "3000:3000"
     depends_on:

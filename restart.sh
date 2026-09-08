@@ -11,7 +11,7 @@ MONITOR_COMPOSE="infrastructure/docker/docker-compose.monitoring.yml"
 SEED_DATABASE="scripts/seed_databases.sh"
 if [ "$1" = "--clean" ]; then
     echo "=========================================="
-    echo "🧹 RUNNING DEEP CLEAN..."
+    echo " RUNNING DEEP CLEAN..."
     echo "=========================================="
 
     # 1. Stop everything running
@@ -28,7 +28,7 @@ if [ "$1" = "--clean" ]; then
     echo "Pruning unused images..."
     docker image prune -a -f
 
-    echo "✅ Deep clean complete!"
+    echo " Deep clean complete!"
     ./run.sh
 
 elif [ "$1" = "--later" ]; then

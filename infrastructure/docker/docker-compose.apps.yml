@@ -18,6 +18,7 @@ services:
       - KEYCLOAK_ADMIN_USER
       - KEYCLOAK_ADMIN_PASSWORD
       - NATS_URL
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://cortexops_otel_collector:4317
     networks:
       - shared_network
 
@@ -34,7 +35,7 @@ services:
     environment:
       - ORGANIZATION_DATABASE_URL
       - NATS_URL
-
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://cortexops_otel_collector:4317
     networks:
       - shared_network
   workflow:
@@ -50,6 +51,7 @@ services:
     environment:
       - WORKFLOW_DATABASE_URL
       - NATS_URL
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://cortexops_otel_collector:4317
 
     networks:
       - shared_network
@@ -68,6 +70,7 @@ services:
       - NATS_URL
       - REDIS_HOST
       - REDIS_PORT
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://cortexops_otel_collector:4317
     networks:
       - shared_network
 networks:
