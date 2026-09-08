@@ -4,6 +4,7 @@ from dataclasses import field, dataclass
 from typing import Any, Dict, Optional
 
 from apps.agent_runtime.infrastructure.struct_logger import struct_logger as logger
+from apps.agent_runtime.infrastructure.telemetry import AgentObservability
 
 
 @dataclass
@@ -34,35 +35,34 @@ class BaseTool(ABC):
         so tool failures never crash the entire Agent execution loop.
         """
         start_time = time.perf_counter()
-        logger.info(
-            "Executing tool",
-            tool_name=self.name,
-            tool_version=self.version,
-        )
+        agent_id = tool_input.context_metadata.get("run_id", "unknown")
+        with AgentObservability.trace_tool_execution(tool_name= self.name, agent_id= agent_id) as span:
+            start_time = time.perf_counter()
+            logger.info( "Executing tool",tool_name=self.name,tool_version=self.version,)
 
-        try:
-            raw_result = self._run(tool_input.parameters)
-            duration_ms = (time.perf_counter() - start_time) * 1000
+            try:
+                raw_result = self._run(tool_input.parameters)
+                duration_ms = (time.perf_counter() - start_time) * 1000
 
-            return ToolOutput(
-                success=True,
-                result=raw_result,
-                execution_duration_ms=round(duration_ms, 2),
-            )
+                return ToolOutput(
+                    success=True,
+                    result=raw_result,
+                    execution_duration_ms=round(duration_ms, 2),
+                )
 
-        except Exception as exc:
-            duration_ms = (time.perf_counter() - start_time) * 1000
-            logger.error(
-                "Tool execution failed",
-                tool_name=self.name,
-                error=str(exc),
-            )
+            except Exception as exc:
+                duration_ms = (time.perf_counter() - start_time) * 1000
+                logger.error(
+                    "Tool execution failed",
+                    tool_name=self.name,
+                    error=str(exc),
+                )
 
-            return ToolOutput(
-                success=False,
-                error=str(exc),
-                execution_duration_ms=round(duration_ms, 2),
-            )
+                return ToolOutput(
+                    success=False,
+                    error=str(exc),
+                    execution_duration_ms=round(duration_ms, 2),
+                )
 
     @abstractmethod
     def _run(self, parameters: Dict[str, Any]) -> Dict[str, Any]:

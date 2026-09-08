@@ -1,8 +1,10 @@
+import time
 from typing import Any, Dict, List, Optional
 import json
 import openai
 
 from apps.agent_runtime.infrastructure.struct_logger import struct_logger as logger
+from apps.agent_runtime.infrastructure.telemetry import AgentObservability
 from apps.agent_runtime.llm.base_client import BaseLLMClient, LLMMessage, LLMResponse, ToolCall
 
 class OpenAILLMClient(BaseLLMClient):
@@ -31,33 +33,60 @@ class OpenAILLMClient(BaseLLMClient):
             kwargs["tools"] = formatted_tools
             kwargs["tool_choice"] = "auto"
 
-        try:
-            response = await self.client.chat.completions.create(**kwargs)
-            choice = response.choices[0]
-            message = choice.message
+        start_time = time.perf_counter()
+        status = "success"
 
-            parsed_tool_calls: List[ToolCall] = []
-            if message.tool_calls:
-                for tc in message.tool_calls:
-                    parsed_tool_calls.append(
-                        ToolCall(
-                            id=tc.id,
-                            tool_name=tc.function.name,
-                            arguments=json.loads(tc.function.arguments),
+        # <-- 2. WRAP WITH LLM TRACE SPAN
+        with AgentObservability.trace_llm_call(provider="openai", model=self.model) as span:
+            try:
+                response = await self.client.chat.completions.create(**kwargs)
+                choice = response.choices[0]
+                message = choice.message
+
+                parsed_tool_calls: List[ToolCall] = []
+                if message.tool_calls:
+                    for tc in message.tool_calls:
+                        parsed_tool_calls.append(
+                            ToolCall(
+                                id=tc.id,
+                                tool_name=tc.function.name,
+                                arguments=json.loads(tc.function.arguments),
+                            )
                         )
-                    )
 
-            return LLMResponse(
-                content=message.content,
-                tool_calls=parsed_tool_calls,
-                finish_reason=choice.finish_reason,
-                total_tokens=response.usage.total_tokens if response.usage else 0,
-            )
+                # <-- 3. ATTACH TOKEN ATTRIBUTES TO SPAN
+                prompt_tokens = response.usage.prompt_tokens if response.usage else 0
+                completion_tokens = response.usage.completion_tokens if response.usage else 0
+                total_tokens = response.usage.total_tokens if response.usage else 0
 
-        except Exception as exc:
-            logger.error("OpenAI client completion request failed", error=str(exc))
-            raise
+                span.set_attribute("llm.usage.prompt_tokens", prompt_tokens)
+                span.set_attribute("llm.usage.completion_tokens", completion_tokens)
+                span.set_attribute("llm.usage.total_tokens", total_tokens)
 
+                return LLMResponse(
+                    content=message.content,
+                    tool_calls=parsed_tool_calls,
+                    finish_reason=choice.finish_reason,
+                    total_tokens=total_tokens,
+                )
+
+            except Exception as exc:
+                status = "failure"
+                logger.error("OpenAI client completion request failed", error=str(exc))
+                raise exc
+
+            finally:
+                # <-- 4. RECORD PROMETHEUS METRICS
+                duration = time.perf_counter() - start_time
+                AgentObservability.record_metrics(
+                    agent_type="ReActAgent",
+                    status=status,
+                    duration=duration,
+                    provider="openai",
+                    model=self.model,
+                    prompt_tokens=prompt_tokens if status == "success" else 0,
+                    completion_tokens=completion_tokens if status == "success" else 0,
+                )
 
     def _format_messages(self, messages: List[LLMMessage]) -> List[Dict[str, Any]]:
         formatted = []

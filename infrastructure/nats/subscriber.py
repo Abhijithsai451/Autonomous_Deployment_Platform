@@ -7,9 +7,9 @@ from packages.events.context import RequestContext
 from packages.events.serializer import EventSerializer
 from packages.logging.structured_logs import struc_logger as logger
 from packages.telemetry.nats import extract_nats_headers
-from packages.telemetry.test_telemetry import tracer
+from opentelemetry import trace
 
-
+tracer = trace.get_tracer("cortexops-nats-subscriber")
 class Subscriber:
     def __init__(self, client: NatsClient):
         self.client = client
@@ -38,10 +38,10 @@ class Subscriber:
 
         async def _msg_handler(msg):
             msg_headers = dict(msg.headers) if msg.headers else {}
-            parent_ctx = extract_nats_headers(msg_headers)  # <-- ADDED
+            parent_ctx = extract_nats_headers(msg_headers)
 
             # Wrap consumer execution in a child span linked to publisher
-            with tracer.start_as_current_span(f"nats.consume.{subject}", context=parent_ctx):  # <-- ADDED
+            with tracer.start_as_current_span(f"nats.consume.{subject}", context=parent_ctx):
                 try:
                     if handler is None:
                         typed_event, envelope = EventSerializer.deserialize_event(msg.data)

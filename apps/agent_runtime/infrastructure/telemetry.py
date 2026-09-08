@@ -1,7 +1,6 @@
-import time
 from contextlib import contextmanager
 from typing import Generator, Optional
-from opentelemetry.trace import Span
+from opentelemetry.trace import Span, StatusCode
 
 from packages.telemetry.context.correlation import bind_correlation_context
 from packages.telemetry.metrics import metrics_registry
@@ -53,14 +52,13 @@ class AgentObservability:
         Records execution counters, duration histograms, and token usage
         using low-cardinality label rules.
         """
-        # Record agent execution run
+
         metrics_registry.record_agent_run(
             agent_type=agent_type,
             status=status,
             duration=duration,
         )
 
-        # Record LLM token metrics if LLM was called
         total_tokens = prompt_tokens + completion_tokens
         if total_tokens > 0:
             metrics_registry.record_llm_call(
@@ -70,3 +68,39 @@ class AgentObservability:
                 duration=duration,
                 tokens=total_tokens,
             )
+
+    @staticmethod
+    @contextmanager
+    def trace_tool_execution(tool_name: str, agent_id: str)-> Generator[Span, None, None]:
+        """ Context Manager for nested tool invocation spans."""
+        with start_agent_span(
+            name=f"agent.tool.{tool_name}",
+            attributes = {
+                "tool.name": tool_name,
+                "agent.id": agent_id,
+                "component":"agent_tool",
+           },
+        ) as span:
+            logger.info("Tool execution started", extra_data = {"tool_name": tool_name})
+            try:
+                yield span
+                span.set_status(StatusCode.OK)
+            except Exception as e:
+                span.set_status(StatusCode.ERROR, str(e))
+                span.record_exception(e)
+                logger.error(f"Tool Execution Error in {tool_name} tool execution: {str(e)}")
+                raise e
+
+    @staticmethod
+    @contextmanager
+    def trace_llm_call(provider: str, model: str)-> Generator[Span, None, None]:
+        """Context Manager for tracing raw LLM API generations"""
+        with start_agent_span(
+            name=f"llm.completion.{provider}",
+            attributes={
+                "llm.provider": provider,
+                "llm.model": model,
+                "component": "llm_client",
+            }
+        ) as span:
+            yield span

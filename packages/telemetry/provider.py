@@ -1,7 +1,11 @@
+import logging
 import os
 import atexit
 from typing import Optional
-from opentelemetry import trace, metrics
+from opentelemetry import trace, metrics, _logs
+from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
+from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.sdk.resources import Resource, SERVICE_NAME, SERVICE_VERSION
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -34,6 +38,7 @@ class TelemetryProvider:
         )
         self._setup_tracing()
         self._setup_metrics()
+        self._setup_logging()
 
     def _setup_tracing(self):
         tracer_provider = TracerProvider(resource= self._resource)
@@ -56,6 +61,18 @@ class TelemetryProvider:
         self.meter = metrics.get_meter(self.service_name, self.service_version)
 
         atexit.register(meter_provider.shutdown)
+
+    def _setup_logging(self):
+        log_exporter = OTLPLogExporter(endpoint=self.otlp_endpoint, insecure=True)
+
+        logger_provider = LoggerProvider(resource=self._resource)
+        logger_provider.add_log_record_processor(BatchLogRecordProcessor(log_exporter))
+        _logs.set_logger_provider(logger_provider)
+
+        handler = LoggingHandler(logger_provider=logger_provider)
+        logging.getLogger().addHandler(handler)
+
+        atexit.register(logger_provider.shutdown)
 
 def init_telemetry(service_name: str, environment: str = "production")-> TelemetryProvider:
     """Helper Function to initialize OpenTelemetry SDk across services"""
