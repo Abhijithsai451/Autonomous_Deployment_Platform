@@ -1,8 +1,11 @@
+import socket
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 import pytest
 import pytest_asyncio
 from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import StatusCode
@@ -25,9 +28,12 @@ from packages.events.context import RequestContext
 DATA = {}
 memory_exporter = InMemorySpanExporter()
 provider = trace.get_tracer_provider()
+if not isinstance(provider, TracerProvider):
+    provider = TracerProvider()
+    trace.set_tracer_provider(provider)
 
-if hasattr(provider, "add_span_processor"):
-    provider.add_span_processor(SimpleSpanProcessor(memory_exporter))
+# Attach SimpleSpanProcessor so spans flush immediately into memory_exporter
+provider.add_span_processor(SimpleSpanProcessor(memory_exporter))
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_test_agent():
@@ -350,31 +356,6 @@ async def test_react_agent_max_iterations_exceeded(mock_context):
     assert result.error.code == "MAX_ITERATIONS_EXCEEDED"
 
 
-def test_delete_test_agent(db: Session):
-    """Executes last to cleanly delete all generated test runs and the seeded test agent."""
-    if DATA.get("created_by_test") and DATA.get("agent_id"):
-        test_agent_id = DATA["agent_id"]
-
-        # Delete dependent runs created during vertical slice tests
-        db.execute(
-            text("DELETE FROM agent_runtime.agent_runs WHERE agent_id = :agent_id"),
-            {"agent_id": test_agent_id},
-        )
-        # Delete the test agent record
-        db.execute(
-            text("DELETE FROM agent_runtime.agents WHERE id = :agent_id"),
-            {"agent_id": test_agent_id},
-        )
-        db.commit()
-
-        # Verify deletion
-        res = db.execute(
-            text("SELECT id FROM agent_runtime.agents WHERE id = :agent_id"),
-            {"agent_id": test_agent_id},
-        ).fetchone()
-
-        assert res is None, "Test agent was not securely deleted from the database."
-
 # ==============================================================================
 # TEST : OPENTELEMETRY Functionality
 # ==============================================================================
@@ -536,3 +517,79 @@ def test_nats_handler_database_exception(db: Session, task_event_data: dict):
 
     RequestContext.clear()
 
+# ==============================================================================
+# TEST : OTEL COLLECTOR PROCESSING
+# ==============================================================================
+def test_collector_outage_isolation(db: Session, task_event_data: dict):
+    """Phase 16 - Test 5: Verifies that if the OTel Collector endpoint is completely unreachable,
+    the Agent Runtime continues to process business events without throwing exceptions or hanging.
+    """
+    payload = task_event_data["payload"]
+    metadata = task_event_data["metadata"]
+    event_id = task_event_data["event_id"]
+
+    RequestContext.set(
+        correlation_id=f"collector-down-{event_id}",
+        tenant_id="tenant-cortexops",
+    )
+
+    mock_llm_response = LLMResponse(
+        content="Task processed cleanly despite collector outage.",
+        tool_calls=[],
+        finish_reason="stop",
+    )
+
+    # 1. Force the OTLP Exporter to attempt export to a closed socket port (Unreachable Collector)
+    unreachable_exporter = OTLPSpanExporter(
+        endpoint="http://127.0.0.1:59999", # Unused local port causing active socket errors
+        insecure=True,
+        timeout=1, # Strict 1s timeout to ensure non-blocking backoff
+    )
+
+    with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter.export",
+                side_effect=socket.error("Connection refused")):
+        with patch("apps.agent_runtime.application.event_handlers.OpenAILLMClient") as mock_client_cls:
+            mock_client_instance = AsyncMock()
+            mock_client_instance.generate.return_value = mock_llm_response
+            mock_client_cls.return_value = mock_client_instance
+
+            # 2. Execute vertical slice handler under active OTel failure
+            success = handle_task_ready_event(
+                db=db,
+                payload=payload,
+                metadata=metadata,
+                api_key="mock-key"
+            )
+
+            assert success is True, "Agent Runtime failed when the OTel Collector went down!"
+
+    RequestContext.clear()
+
+
+# ==============================================================================
+# TEST : DELETING TEST AGENT FROM DB
+# ==============================================================================
+
+def test_delete_test_agent(db: Session):
+    """Executes last to cleanly delete all generated test runs and the seeded test agent."""
+    if DATA.get("created_by_test") and DATA.get("agent_id"):
+        test_agent_id = DATA["agent_id"]
+
+        db.execute(
+            text("DELETE FROM agent_runtime.agent_runs WHERE agent_id = :agent_id"),
+            {"agent_id": test_agent_id},
+        )
+        # Delete the test agent record
+        db.execute(
+            text("DELETE FROM agent_runtime.agents WHERE id = :agent_id"),
+            {"agent_id": test_agent_id},
+        )
+        db.commit()
+
+        # Verify deletion
+        res = db.execute(
+            text("SELECT id FROM agent_runtime.agents WHERE id = :agent_id"),
+            {"agent_id": test_agent_id},
+        ).fetchone()
+
+        assert res is None, "Test agent was not securely deleted from the database."
