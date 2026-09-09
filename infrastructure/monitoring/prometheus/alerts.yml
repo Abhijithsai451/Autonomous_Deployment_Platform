@@ -1,0 +1,24 @@
+groups:
+  - name: cortexops_agent_alerts
+    rules:
+      - alert: HighAgentFailureRate
+        expr: |
+          sum(rate(cortexops_agent_runs_total{status="failed"}[5m]))
+          /
+          sum(rate(cortexops_agent_runs_total[5m])) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Agent Runtime error rate exceeded 10%"
+          description: "Over 10% of agent executions are failing over the last 5 minutes."
+
+      - alert: AgentExecutionLatencyHigh
+        expr: |
+          histogram_quantile(0.95, sum(rate(cortexops_agent_execution_duration_seconds_bucket[5m])) by (le)) > 10
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P95 Agent Execution Latency is over 5s"
+          description: "Agent runs are taking longer than expected."

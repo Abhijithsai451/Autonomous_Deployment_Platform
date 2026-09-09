@@ -1,0 +1,117 @@
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.95.0
+    container_name: cortexops_otel_collector
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.10'
+          memory: 64M
+    volumes:
+      - ../monitoring/otel-collector/otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4317:4317"   # OTLP gRPC receiver
+      - "4318:4318"   # OTLP HTTP receiver
+      - "8889:8889"   # Prometheus metrics exporter
+    networks:
+      - shared_network
+
+  prometheus:
+    image: prom/prometheus:v2.50.0
+    container_name: cortexops_prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.10'
+          memory: 128M
+    volumes:
+      - ../monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ../monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - shared_network
+
+  loki:
+    image: grafana/loki:2.9.4
+    container_name: cortexops_loki
+    command: -config.file=/etc/loki/loki-config.yaml
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.10'
+          memory: 128M
+    volumes:
+      - ../monitoring/loki/loki-config.yaml:/etc/loki/loki-config.yaml
+    ports:
+      - "3100:3100"
+    networks:
+      - shared_network
+
+  tempo:
+    image: grafana/tempo:2.3.1
+    container_name: cortexops_tempo
+    command: ["-config.file=/etc/tempo-config.yaml"]
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.10'
+          memory: 128M
+    volumes:
+      - ../monitoring/tempo/tempo-config.yaml:/etc/tempo-config.yaml
+    ports:
+      - "3200:3200"
+      - "4317"
+    networks:
+      - shared_network
+
+  grafana:
+    image: grafana/grafana:10.3.3
+    container_name: cortexops_grafana
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+        reservations:
+          cpus: '0.10'
+          memory: 64M
+    environment:
+      - GF_SECURITY_ADMIN_USER=superuser
+      - GF_SECURITY_ADMIN_PASSWORD=securepassword
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_DATABASE_WAL=true
+      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+    volumes:
+      - ../monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ../monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+    networks:
+      - shared_network
+
+networks:
+  shared_network:
+    name: cortexops_shared_network
+    external: true

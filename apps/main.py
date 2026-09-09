@@ -13,7 +13,7 @@ async def lifespan(app: FastAPI):
     await app.state.dishka_container.close()
 
 def create_app():
-    app = FastAPI(title= "CortexOps API Platform", lifespan = lifespan)
+    app = FastAPI(title= "ADD Platform API Platform", lifespan = lifespan)
 
     container = make_async_container(
         InfrastructureProvider(),
