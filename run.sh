@@ -38,7 +38,7 @@ test_health() {
 }
 
 echo "========================================="
-echo "   Starting CortexOps Platform "
+echo "   Starting Autonomous DEVOPS Platform "
 echo "========================================="
 
 if ! docker network inspect "$NETWORK_NAME" >/dev/null 2>&1; then
@@ -59,7 +59,6 @@ docker compose --env-file .env -f "$MONITOR_COMPOSE" up -d
 echo "Waiting a few seconds for Monitoring services to stabilize..."
 sleep 2
 
-# 3. Launch Application Services (Identity , Audit, Workflow etc.)
 echo " Launching Application Services..."
 docker compose --env-file .env -f "$APPS_COMPOSE" up --build -d
 

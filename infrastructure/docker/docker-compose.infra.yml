@@ -3,6 +3,14 @@ services:
     image: postgres:17
     container_name: infra_pgdb
     restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
     environment:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
@@ -19,6 +27,14 @@ services:
     image: nats:latest
     container_name: infra_nats
     restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.10'
+          memory: 128M
     ports:
       - "4222:4222"
       - "8222:8222"
@@ -32,6 +48,14 @@ services:
     image: quay.io/keycloak/keycloak:24.0
     container_name: infra_keycloak
     command: start-dev --import-realm
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 512M
     ports:
       - "8080:8080"
     volumes:
@@ -55,6 +79,14 @@ services:
     image: redis:7.2-alpine
     container_name: infra_redis
     restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.10'
+          memory: 64M
     ports:
       - "6379:6379"
     volumes:

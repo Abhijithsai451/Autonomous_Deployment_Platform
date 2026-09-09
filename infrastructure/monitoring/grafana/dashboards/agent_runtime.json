@@ -15,14 +15,14 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(cortexops_agent_execution_total[5m])) by (status)",
+          "expr": "sum(rate(cortexops_agent_runs_total[5m])) by (status) or sum(increase(cortexops_agent_runs_total[5m])) by (status)",
           "legendFormat": "{{agent_type}} - {{status}}"
         }
       ]
     },
     {
       "id": 2,
-      "title": "P95 Execution Latency (Seconds)",
+      "title": "Execution Latency (Seconds)",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
       "targets": [
@@ -41,7 +41,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(cortexops_agent_llm_token_usage_total[5m]))",
+          "expr": "sum(rate(cortexops_llm_tokens_total[5m])) by (token_type, model) or sum(increase(cortexops_llm_tokens_total[5m]))",
           "legendFormat": "{{model}} - {{token_type}}"
         }
       ]

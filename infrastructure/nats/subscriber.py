@@ -1,6 +1,8 @@
 import json
 from typing import Callable, Dict, Any, Awaitable, Type
 
+from nats.js.api import ConsumerConfig, DeliverPolicy
+
 from infrastructure.nats.nats_client import NatsClient
 from packages.events.base import BaseEvent
 from packages.events.context import RequestContext
@@ -17,7 +19,6 @@ class Subscriber:
         self._event_handlers : Dict[Type[BaseEvent], Callable[[BaseEvent], Awaitable[None]]] = {}
 
     def register_handler(self,event_cls: Type[BaseEvent],handler: Callable[[BaseEvent], Awaitable[None]]) -> None:
-        """Registers a typed domain handler for a specific BaseEvent class."""
         self._event_handlers[event_cls] = handler
 
     def on_event(self, event_cls: Type[BaseEvent]):
@@ -31,16 +32,23 @@ class Subscriber:
         stream: str,
         subject: str,
         durable_name: str,
-        handler: Callable[[Dict[str, Any], Dict[str, Any]], Awaitable[None]]
+        handler: Callable[[Dict[str, Any], Dict[str, Any]], Awaitable[None]],
+        max_deliver: int = 3
     ) -> None:
         if not self.client.js:
             await self.client.connect()
+
+        config = ConsumerConfig(
+            durable_name=durable_name,
+            deliver_policy=DeliverPolicy.ALL,
+            max_deliver=max_deliver,
+            ack_wait = 10,
+        )
 
         async def _msg_handler(msg):
             msg_headers = dict(msg.headers) if msg.headers else {}
             parent_ctx = extract_nats_headers(msg_headers)
 
-            # Wrap consumer execution in a child span linked to publisher
             with tracer.start_as_current_span(f"nats.consume.{subject}", context=parent_ctx):
                 try:
                     if handler is None:
@@ -68,16 +76,36 @@ class Subscriber:
                     await msg.ack()
 
                 except Exception as e:
-                    logger.error(
-                        f"Error handling message on subject '{subject}': {e}",
-                        exc_info=True
-                    )
+                    metadata = await msg.metadata()
+
+                    if metadata.num_delivered >= max_deliver:
+                        logger.error(
+                            f"Message on '{subject}' exceeded max redeliveries ({max_deliver}). Routing to DLQ: {e}",
+                            exc_info=True
+                        )
+                        dlq_subject = f"{subject.split('.')[0]}.dlq"
+                        await self.client.js.publish(
+                            subject=dlq_subject,
+                            payload=msg.data,
+                            headers={
+                                "x-dlq-reason": str(e),
+                                "x-original-subject": msg.subject,
+                                "x-delivery-count": str(metadata.num_delivered)
+                            }
+                        )
+                        await msg.ack()
+                    else:
+                        logger.warning(
+                            f"Transient failure handling message on '{subject}' (attempt {metadata.num_delivered}/{max_deliver}): {e}"
+                        )
+                        await msg.nak()
 
         sub = await self.client.js.subscribe(
             subject=subject,
             durable=durable_name,
             queue=durable_name,
             stream=stream,
+            config=config,
             cb=_msg_handler,
             manual_ack=True
         )
