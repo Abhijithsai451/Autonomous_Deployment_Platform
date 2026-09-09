@@ -1,11 +1,13 @@
 from typing import Any, Dict, List
+
+from opentelemetry import trace
+
 from apps.agent_runtime.domain.agent_contract import BaseAgent, AgentContext, AgentResult, AgentExecutionStatus, AgentError
 from apps.agent_runtime.infrastructure.struct_logger import struct_logger as logger
 from apps.agent_runtime.llm.base_client import BaseLLMClient, LLMMessage
-from apps.agent_runtime.tools.tool_registry import global_tool_registry
+from apps.agent_runtime.tools.tool_registry import global_tool_registry, ToolRegistryError
 
-
-
+tracer = trace.get_tracer("agent-runtime-react-agent")
 class ReActLLMAgent(BaseAgent):
     """
     ReAct (Reasoning + Acting) Agent Engine.
@@ -17,61 +19,71 @@ class ReActLLMAgent(BaseAgent):
         self.max_iterations = max_iterations
 
     async def execute_async(self, context: AgentContext) -> AgentResult:
-        system_prompt = (
-            "You are a helpful automation agent. Analyze the user's task, select appropriate "
-            "tools from the provided functions, execute them, and return a structured final summary."
-        )
-
-        messages: List[LLMMessage] = [
-            LLMMessage(role="system", content=system_prompt),
-            LLMMessage(role="user", content=str(context.input_data)),
-        ]
-
-        tool_schemas = global_tool_registry.get_all_schemas()
-
-        for iteration in range(self.max_iterations):
-            logger.info("ReAct Loop Iteration", iteration=iteration + 1, run_id=str(context.run_id))
-
-            response = await self.llm_client.generate(messages=messages, tools=tool_schemas)
-
-            # Case A: Model issued a final answer without tools
-            if not response.tool_calls:
-                messages.append(LLMMessage(role="assistant", content=response.content))
-                return AgentResult(
-                    status=AgentExecutionStatus.COMPLETED,
-                    output_data={"answer": response.content, "iterations": iteration + 1},
-                )
-
-            # Case B: Model requested one or more tool executions
-            messages.append(
-                LLMMessage(
-                    role="assistant",
-                    content=response.content,
-                    tool_calls=response.tool_calls,
-                )
+        with tracer.start_as_current_span("agent_run.execution") as span:
+            span.set_attribute("agent.run_id", str(context.run_id))
+            system_prompt = (
+                "You are a helpful automation agent. Analyze the user's task, select appropriate "
+                "tools from the provided functions, execute them, and return a structured final summary."
             )
 
-            for tool_call in response.tool_calls:
-                logger.info("Executing Tool Request", tool_name=tool_call.tool_name, tool_call_id=tool_call.id)
-                tool_output = global_tool_registry.execute_tool(
-                    tool_name=tool_call.tool_name,
-                    parameters=tool_call.arguments,
-                    context_metadata={"run_id": str(context.run_id)},
-                )
+            messages: List[LLMMessage] = [
+                LLMMessage(role="system", content=system_prompt),
+                LLMMessage(role="user", content=str(context.input_data)),
+            ]
 
-                # Feed execution result back to conversation context
+            tool_schemas = global_tool_registry.get_all_schemas()
+
+            for iteration in range(self.max_iterations):
+                logger.info("ReAct Loop Iteration", iteration=iteration + 1, run_id=str(context.run_id))
+
+                response = await self.llm_client.generate(messages=messages, tools=tool_schemas)
+
+                if not response.tool_calls:
+                    messages.append(LLMMessage(role="assistant", content=response.content))
+                    return AgentResult(
+                        status=AgentExecutionStatus.COMPLETED,
+                        output_data={"answer": response.content, "iterations": iteration + 1},
+                    )
+
                 messages.append(
                     LLMMessage(
-                        role="tool",
-                        tool_call_id=tool_call.id,
-                        content=str(tool_output.result if tool_output.success else tool_output.error),
+                        role="assistant",
+                        content=response.content,
+                        tool_calls=response.tool_calls,
                     )
                 )
 
-        return AgentResult(
-            status=AgentExecutionStatus.FAILED,
-            error=AgentError(
-                code="MAX_ITERATIONS_EXCEEDED",
-                message=f"Agent failed to settle on a final answer within {self.max_iterations} iterations.",
-            ),
-        )
+                for tool_call in response.tool_calls:
+                    logger.info("Executing Tool Request", tool_name=tool_call.tool_name, tool_call_id=tool_call.id)
+                    try:
+                        tool_output = global_tool_registry.execute_tool(
+                            tool_name=tool_call.tool_name,
+                            parameters=tool_call.arguments,
+                            context_metadata={"run_id": str(context.run_id)},
+                        )
+                        content_str= str(tool_output.result if tool_output.success else tool_output.error)
+                    except (ToolRegistryError, Exception) as exc:
+                        logger.error("Tool execution failed", tool_name=tool_call.tool_name, error=str(exc))
+                        return AgentResult(
+                            status=AgentExecutionStatus.FAILED,
+                            error=AgentError(
+                                code="TOOL_EXECUTION_ERROR",
+                                message=f"Tool execution failed for '{tool_call.tool_name}': {str(exc)}",
+                            ),
+                        )
+                    # Feed execution result back to conversation context
+                    messages.append(
+                        LLMMessage(
+                            role="tool",
+                            tool_call_id=tool_call.id,
+                            content=str(tool_output.result if tool_output.success else tool_output.error),
+                        )
+                    )
+
+            return AgentResult(
+                status=AgentExecutionStatus.FAILED,
+                error=AgentError(
+                    code="MAX_ITERATIONS_EXCEEDED",
+                    message=f"Agent failed to settle on a final answer within {self.max_iterations} iterations.",
+                ),
+            )

@@ -121,7 +121,7 @@ class OpenAILLMClient(BaseLLMClient):
     @retry(
         reraise=True,
         stop=stop_after_attempt(3),
-        wait = wait_exponential(multiple=1, min=2, max=10),
+        wait = wait_exponential(multiplier=1, min=2, max=10),
         retry=retry_if_exception_type((
             openai.APITimeoutError,
             openai.RateLimitError,
