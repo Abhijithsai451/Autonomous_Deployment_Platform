@@ -9,6 +9,9 @@ structlog>=24.1.0
 sqlalchemy
 # security
 pyjwt
+tenacity
+
+
 # Messaging
 nats-py
 # LLM

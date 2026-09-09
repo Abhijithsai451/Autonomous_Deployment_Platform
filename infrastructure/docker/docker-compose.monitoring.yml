@@ -3,6 +3,14 @@ services:
     image: otel/opentelemetry-collector-contrib:0.95.0
     container_name: cortexops_otel_collector
     command: ["--config=/etc/otel-collector-config.yaml"]
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.10'
+          memory: 64M
     volumes:
       - ../monitoring/otel-collector/otel-collector-config.yaml:/etc/otel-collector-config.yaml
     ports:
@@ -12,7 +20,6 @@ services:
     networks:
       - shared_network
 
-  # 2. Prometheus (Metrics)
   prometheus:
     image: prom/prometheus:v2.50.0
     container_name: cortexops_prometheus
@@ -20,8 +27,17 @@ services:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
       - --web.enable-lifecycle
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.10'
+          memory: 128M
     volumes:
       - ../monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ../monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml
     ports:
       - "9090:9090"
     networks:
@@ -31,6 +47,14 @@ services:
     image: grafana/loki:2.9.4
     container_name: cortexops_loki
     command: -config.file=/etc/loki/loki-config.yaml
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.10'
+          memory: 128M
     volumes:
       - ../monitoring/loki/loki-config.yaml:/etc/loki/loki-config.yaml
     ports:
@@ -42,6 +66,14 @@ services:
     image: grafana/tempo:2.3.1
     container_name: cortexops_tempo
     command: ["-config.file=/etc/tempo-config.yaml"]
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.10'
+          memory: 128M
     volumes:
       - ../monitoring/tempo/tempo-config.yaml:/etc/tempo-config.yaml
     ports:
@@ -53,6 +85,14 @@ services:
   grafana:
     image: grafana/grafana:10.3.3
     container_name: cortexops_grafana
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+        reservations:
+          cpus: '0.10'
+          memory: 64M
     environment:
       - GF_SECURITY_ADMIN_USER=superuser
       - GF_SECURITY_ADMIN_PASSWORD=securepassword

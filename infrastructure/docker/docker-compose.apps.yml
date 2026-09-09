@@ -7,6 +7,14 @@ services:
     ports:
       - "8000:8000"
     command: ["python", "-m", "uvicorn", "apps.identity.identity_main:app", "--host", "0.0.0.0", "--port", "8000"]
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.10'
+          memory: 128M
     env_file:
       - ../../.env
     environment:
@@ -30,6 +38,14 @@ services:
     ports:
       - "8001:8001"
     command: ["python", "-m", "uvicorn", "apps.organization.org_main:app", "--host", "0.0.0.0", "--port", "8001"]
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.10'
+          memory: 128M
     env_file:
       - ../../.env
     environment:
@@ -46,6 +62,14 @@ services:
     ports:
       - "8002:8002"
     command: [ "python", "-m", "uvicorn", "apps.workflow.workflow_main:app", "--host", "0.0.0.0", "--port", "8002" ]
+    deploy:
+      resources:
+        limits:
+          cpus: '0.75'
+          memory: 768M
+        reservations:
+          cpus: '0.15'
+          memory: 256M
     env_file:
       - ../../.env
     environment:
@@ -63,6 +87,14 @@ services:
     ports:
       - "8003:8003"
     command: [ "python", "-m", "uvicorn", "apps.agent_runtime.agent_runtime_main:app", "--host", "0.0.0.0", "--port", "8003" ]
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
     env_file:
       - ../../.env
     environment:
