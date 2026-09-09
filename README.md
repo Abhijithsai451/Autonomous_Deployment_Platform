@@ -1,4 +1,4 @@
-# Enterprise AI-Powered Autonomous Operations Platform
+# Enterprise Autonomous Development & Operations Platform
 
 This platform is a high-performance, microservice-oriented platform designed for operational intelligence and workflow automation. It leverages a modern Python stack with a focus on scalability, distributed messaging, and robust identity management.
 
@@ -22,7 +22,7 @@ Project is built using a modular "apps" architecture, separating concerns across
 ## Project Structure
 
 ```plain text
-CortexOps/
+Autonomous DevOps/
 ├── apps/                 # Core Microservices
 │   ├── identity/         # Auth, RBAC, Keycloak integration
 │   ├── organization/     # Org, Department, and Project management
