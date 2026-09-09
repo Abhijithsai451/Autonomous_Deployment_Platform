@@ -24,6 +24,7 @@ from apps.agent_runtime.repository.outbox_repository import OutboxRepository
 from apps.agent_runtime.repository.processed_events_repository import ProcessedEventsRepository
 from apps.agent_runtime.tools.tool_registry import ToolRegistryError, global_tool_registry, ToolRegistry
 from packages.events.context import RequestContext
+from packages.telemetry.scrubber import sanitize_telemetry_dict, REDACTED_STRING
 
 DATA = {}
 memory_exporter = InMemorySpanExporter()
@@ -565,6 +566,31 @@ def test_collector_outage_isolation(db: Session, task_event_data: dict):
 
     RequestContext.clear()
 
+# ==============================================================================
+# TEST : REDACT Test for Observability Security
+# ==============================================================================
+
+def test_sensitive_data_redaction():
+    """Phase 17 - Test 12: Verifies sensitive keys and tokens are fully scrubbed."""
+    raw_payload = {
+        "user_id": "usr-12345",
+        "api_key": "sk-proj-99999999999999999999",
+        "nested": {
+            "password": "SuperSecretPassword123!",
+            "normal_field": "safe_value"
+        },
+        "headers": {
+            "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
+        }
+    }
+
+    sanitized = sanitize_telemetry_dict(raw_payload)
+
+    assert sanitized["user_id"] == "usr-12345"
+    assert sanitized["api_key"] == REDACTED_STRING
+    assert sanitized["nested"]["password"] == REDACTED_STRING
+    assert sanitized["nested"]["normal_field"] == "safe_value"
+    assert sanitized["headers"]["Authorization"] == REDACTED_STRING
 
 # ==============================================================================
 # TEST : DELETING TEST AGENT FROM DB
