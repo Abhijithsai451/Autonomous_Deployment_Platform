@@ -73,7 +73,7 @@ for service in "${SERVICES[@]}"; do
     test_health "$name" "http://localhost:$port/health"
 done
 
-# 5. Loop: Dynamically run unit tests for ALL services
+# 5. Loop: Dynamically run unit tests for ALL services_events
 echo "========================================="
 echo " Running Service Unit Tests"
 echo "========================================="
