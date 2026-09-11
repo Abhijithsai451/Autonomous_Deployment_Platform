@@ -1,14 +1,24 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from packages.config.services.agent_runtime import AgentRuntimeServiceSettings
 
-class Settings(BaseSettings):
-    AGENT_RUNTIME_DATABASE_URL: str
-    NATS_URL : str
-    REDIS_HOST : str
-    REDIS_PORT : str
+_settings = AgentRuntimeServiceSettings()
+class AgentRuntimeSettingsAdapter():
+    def __init__(self, config: AgentRuntimeServiceSettings) -> None:
+        self._config = config
 
-    model_config = SettingsConfigDict(
-        env_file = ".env",
-        extra = "ignore"
-    )
+    @property
+    def AGENT_RUNTIME_DATABASE_URL(self) -> str:
+        return self._config.AGENT_RUNTIME_DATABASE_URL
 
-agent_runtime_settings = Settings()
+    @property
+    def NATS_URL(self) -> str:
+        return self._config.NATS_URL
+
+    @property
+    def REDIS_HOST(self) -> str:
+        return self._config.REDIS_HOST
+
+    @property
+    def REDIS_PORT(self) -> str:
+        return self._config.REDIS_PORT
+
+agent_runtime_settings = AgentRuntimeSettingsAdapter(_settings)

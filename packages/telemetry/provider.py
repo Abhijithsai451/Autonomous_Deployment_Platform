@@ -75,7 +75,7 @@ class TelemetryProvider:
         atexit.register(logger_provider.shutdown)
 
 def init_telemetry(service_name: str, environment: str = "production")-> TelemetryProvider:
-    """Helper Function to initialize OpenTelemetry SDk across services"""
+    """Helper Function to initialize OpenTelemetry SDk across services_events"""
     return TelemetryProvider(service_name, environment=environment)
 
 

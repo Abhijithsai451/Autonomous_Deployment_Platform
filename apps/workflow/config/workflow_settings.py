@@ -1,12 +1,17 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from packages.config.services.workflow import WorkflowServiceSettings
 
-class Settings(BaseSettings):
-    WORKFLOW_DATABASE_URL: str
-    NATS_URL : str
+_settings = WorkflowServiceSettings()
 
-    model_config = SettingsConfigDict(
-        env_file = ".env",
-        extra = "ignore"
-    )
+class WorkflowSettingsAdapter():
+    def __init__(self, config: WorkflowServiceSettings) -> None:
+        self._config = config
 
-workflow_settings = Settings()
+    @property
+    def WORKFLOW_DATABASE_URL(self) -> str:
+        return self._config.WORKFLOW_DATABASE_URL
+
+    @property
+    def NATS_URL(self) -> str:
+        return self._config.NATS_URL
+
+workflow_settings = WorkflowSettingsAdapter(_settings)

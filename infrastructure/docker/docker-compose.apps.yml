@@ -18,14 +18,6 @@ services:
     env_file:
       - ../../.env
     environment:
-      - IDENTITY_DATABASE_URL
-      - KEYCLOAK_URL
-      - KEYCLOAK_REALM
-      - KEYCLOAK_CLIENT_ID
-      - KEYCLOAK_CLIENT_SECRET
-      - KEYCLOAK_ADMIN_USER
-      - KEYCLOAK_ADMIN_PASSWORD
-      - NATS_URL
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://cortexops_otel_collector:4317
     networks:
       - shared_network
@@ -49,8 +41,6 @@ services:
     env_file:
       - ../../.env
     environment:
-      - ORGANIZATION_DATABASE_URL
-      - NATS_URL
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://cortexops_otel_collector:4317
     networks:
       - shared_network
@@ -73,10 +63,7 @@ services:
     env_file:
       - ../../.env
     environment:
-      - WORKFLOW_DATABASE_URL
-      - NATS_URL
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://cortexops_otel_collector:4317
-
     networks:
       - shared_network
   agent_runtime:

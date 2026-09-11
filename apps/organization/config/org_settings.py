@@ -1,12 +1,17 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from packages.config.services.organization import OrganizationServiceSettings
 
-class Settings(BaseSettings):
-    ORGANIZATION_DATABASE_URL: str
-    NATS_URL : str
+_settings = OrganizationServiceSettings()
 
-    model_config = SettingsConfigDict(
-        env_file = ".env",
-        extra = "ignore"
-    )
+class OrganizationSettingsAdapter():
+    def __init__(self, config: OrganizationServiceSettings) -> None:
+        self._config = config
 
-org_settings = Settings()
+    @property
+    def ORGANIZATION_DATABASE_URL(self) -> str:
+        return self._config.ORGANIZATION_DATABASE_URL
+
+    @property
+    def NATS_URL(self) -> str:
+        return self._config.NATS_URL
+
+org_settings = OrganizationSettingsAdapter(_settings)
