@@ -2,7 +2,7 @@ import json
 import uuid
 from typing import Any, Dict, Optional
 
-from infrastructure.nats.nats_client import NatsClient
+from packages.messaging.nats.nats_client import NatsClient
 from packages.logging.structured_logs import struc_logger as logger
 from packages.telemetry.nats import inject_nats_headers
 

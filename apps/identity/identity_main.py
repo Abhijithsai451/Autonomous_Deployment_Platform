@@ -1,15 +1,21 @@
 import asyncio
+
+from apps.identity.infrastructure.database import db_client
 from apps.identity.infrastructure.identity_nats_client import identity_nats_client as nats
 from apps.identity.infrastructure.outbox_publisher import IdentityOutboxPublisher
 from apps.identity.infrastructure.structured_logs import struct_logger as logger
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from apps.identity.api.v1 import auth, users, roles_permissions, service_accounts, api_keys
+from packages.redis.redis_client import redis_client
 
 identity_publisher = IdentityOutboxPublisher(poll_interval_seconds=0.01, batch_size=50)
 
 @asynccontextmanager
 async def identity_lifespan(app: FastAPI):
+    if not db_client.check_health():
+        raise RuntimeError("Identity database health check failed on startup!")
+    await redis_client.initialize()
     await nats.initialize()
     logger.info("NATS Messaging Core successfully initialized.")
 
@@ -19,6 +25,7 @@ async def identity_lifespan(app: FastAPI):
     identity_publisher.stop()
     await task_publisher
     await nats.shutdown()
+    await redis_client.close()
     logger.info("NATS Messaging Core successfully disconnected.")
 
 app = FastAPI(title="ADD Platform Identity Service", lifespan=identity_lifespan)

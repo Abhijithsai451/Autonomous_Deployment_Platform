@@ -7,9 +7,11 @@ from sqlalchemy.orm.exc import StaleDataError
 
 from apps.workflow.api.v1 import blueprint_api, instance_api, task_api, timeline_api
 from apps.workflow.application.idempotency_service import idempotent_listener
+from apps.workflow.infrastructure.database import workflow_db_client
 from apps.workflow.infrastructure.outbox_publisher import workflow_outbox_publisher
 from apps.workflow.infrastructure.structured_logs import struct_logger as logger
 from apps.workflow.infrastructure.workflow_nats_client import workflow_nats_client as nats
+from packages.redis.redis_client import redis_client
 
 
 async def example_workflow_logging_handler(payload: dict, metadata: dict):
@@ -26,6 +28,11 @@ async def department_created_event_handler(payload: dict, metadata: dict):
 
 @asynccontextmanager
 async def workflow_lifespan(app: FastAPI):
+    if not workflow_db_client.check_health():
+        raise RuntimeError("Workflow database health check failed on startup!")
+
+    await redis_client.initialize()
+
     await nats.initialize()
     logger.info("NATS Messaging Core successfully initialized.")
 
@@ -42,6 +49,7 @@ async def workflow_lifespan(app: FastAPI):
     await outbox_task
 
     await nats.shutdown()
+    await redis_client.close()
     logger.info("NATS Messaging Core successfully disconnected.")
 
 app = FastAPI(title="ADD Platform Workflow Service", lifespan= workflow_lifespan)

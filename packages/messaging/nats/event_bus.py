@@ -1,8 +1,8 @@
 from typing import Optional, Any, Dict, Callable, Awaitable
 
-from infrastructure.nats.nats_client import NatsClient
-from infrastructure.nats.publisher import Publisher
-from infrastructure.nats.subscriber import Subscriber
+from packages.messaging.nats.nats_client import NatsClient
+from packages.messaging.nats.publisher import Publisher
+from packages.messaging.nats.subscriber import Subscriber
 from packages.config.settings import common_settings
 from packages.events.base import BaseEvent
 from packages.events.event_envelope import EventEnvelope

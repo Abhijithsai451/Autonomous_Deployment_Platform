@@ -6,7 +6,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from apps.workflow.application.dependency_service import TaskDependencyEngine
-from apps.workflow.domain.events.tasks_events import TaskNotFoundEvent, TaskStartedEvent, TaskReadyEvent, \
+from packages.events.services_events.workflow_events import TaskNotFoundEvent, TaskStartedEvent, TaskReadyEvent, \
     TaskCompletedEvent, TaskFailedEvent, TaskRetryEvent, TaskCancelEvent
 from apps.workflow.domain.exceptions import InvalidStateTransitionError
 from apps.workflow.domain.outbox import OutboxEvent, OutboxStatus

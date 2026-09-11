@@ -3,18 +3,17 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from apps.organization.api.v1 import organization_api, project_api, department_api
+from apps.organization.infrastructure.database import org_db_client
 from apps.organization.infrastructure.org_nats_client import org_nats_client as nats
 from apps.organization.infrastructure.structured_logs import struct_logger as logger
 from packages.logging.structured_logs import StructuredLogger
+from packages.redis.redis_client import redis_client
 
 log_manager = StructuredLogger(
     service_name="cortexops-organization",
     level= "INFO",
     initial_context = {"env": "production"}
 )
-
-async def example_organization_logging_handler(payload: dict, metadata: dict):
-    logger.info(f"Received event tracking hook: {metadata.get('event_type')} - ID: {payload.get('id')}")
 
 async def user_invited_event_handler(payload: dict, metadata: dict):
     user_id = payload.get("id")
@@ -32,6 +31,11 @@ async def user_invited_event_handler(payload: dict, metadata: dict):
 
 @asynccontextmanager
 async def organization_lifespan(app: FastAPI):
+    if not org_db_client.check_health():
+        raise RuntimeError("Organization database health check failed on startup!")
+
+    await redis_client.initialize()
+
     await nats.initialize()
     logger.info("NATS Messaging Core successfully initialized.")
     await nats.client.ensure_stream(stream_name="identity_events", subjects=['identity.>'])
@@ -43,6 +47,7 @@ async def organization_lifespan(app: FastAPI):
         )
     yield
     await nats.shutdown()
+    await redis_client.close()
     logger.info("NATS Messaging Core successfully disconnected.")
 
 

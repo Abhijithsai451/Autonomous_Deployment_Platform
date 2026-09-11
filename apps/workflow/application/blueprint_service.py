@@ -4,7 +4,7 @@ from uuid import UUID
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from apps.workflow.domain.events.blueprint_events import BlueprintAlreadyExists, BlueprintCreatedEvent, \
+from packages.events.services_events.workflow_events import BlueprintAlreadyExists, BlueprintCreatedEvent, \
     BlueprintUpdateEvent
 from apps.workflow.domain.outbox import OutboxEvent, OutboxStatus
 from apps.workflow.domain.workflow_blueprints import WorkflowBlueprint

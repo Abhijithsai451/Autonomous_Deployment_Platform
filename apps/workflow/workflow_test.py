@@ -8,7 +8,7 @@ from sqlalchemy import text
 import warnings
 
 from apps.workflow.application.idempotency_service import IdempotencyService
-from apps.workflow.domain.events.instance_events import WorkflowStartedEvent
+from packages.events.services_events.workflow_events import WorkflowStartedEvent
 from apps.workflow.domain.outbox import OutboxStatus, OutboxEvent
 from apps.workflow.infrastructure.outbox_publisher import workflow_outbox_publisher
 from apps.workflow.infrastructure.database import workflow_db_client as db_client, workflow_db_session
