@@ -12,6 +12,7 @@ from apps.agent_runtime.infrastructure.database import agent_runtime_db_client
 from apps.agent_runtime.infrastructure.outbox_publisher import agent_outbox_publisher
 from apps.agent_runtime.infrastructure.struct_logger import struct_logger as logger
 from apps.agent_runtime.infrastructure.telemetry import AgentObservability
+from packages.redis.redis_client import redis_client
 from packages.telemetry.provider import init_telemetry
 
 
@@ -22,6 +23,7 @@ async def agent_lifespan(app: FastAPI):
     init_telemetry(service_name="cortexops-agent-runtime", environment="local")
     logger.info("Initializing the Agent Runtime Daemon ....")
 
+    await redis_client.initialize()
     await nats.initialize()
     logger.info("NATS Core Messaging is successfully initialized for Agent Runtime Service")
     outbox_task = asyncio.create_task(agent_outbox_publisher.start())
@@ -31,8 +33,9 @@ async def agent_lifespan(app: FastAPI):
 
     agent_outbox_publisher.stop()
     await outbox_task
-
     await nats.shutdown()
+    await redis_client.close()
+
     logger.info("NATS Messaging Core successfully disconnected from Agent Runtime.")
 
 app = FastAPI(title="ADD Platform Agent Runtime Service", lifespan=agent_lifespan)
