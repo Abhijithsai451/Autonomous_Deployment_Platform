@@ -1,18 +1,40 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from packages.config.services.identity import IdentityServiceSettings
 
-class Settings(BaseSettings):
-    IDENTITY_DATABASE_URL: str
-    KEYCLOAK_URL: str
-    KEYCLOAK_REALM: str
-    KEYCLOAK_CLIENT_ID: str
-    KEYCLOAK_CLIENT_SECRET: str
-    KEYCLOAK_ADMIN_USER: str
-    KEYCLOAK_ADMIN_PASSWORD: str
-    NATS_URL : str
+_settings = IdentityServiceSettings()
+class IdentitySettingsAdapter():
+    def __init__(self, config: IdentityServiceSettings) -> None:
+        self._config = config
 
-    model_config = SettingsConfigDict(
-        env_file = ".env",
-        extra = "ignore"
-    )
+    @property
+    def IDENTITY_DATABASE_URL(self) -> str:
+        return self._config.IDENTITY_DATABASE_URL
 
-identity_settings = Settings()
+    @property
+    def KEYCLOAK_URL(self) -> str:
+        return self._config.KEYCLOAK_URL
+
+    @property
+    def KEYCLOAK_REALM(self) -> str:
+        return self._config.KEYCLOAK_REALM
+
+    @property
+    def KEYCLOAK_CLIENT_ID(self) -> str:
+        return self._config.KEYCLOAK_CLIENT_ID
+
+    @property
+    def KEYCLOAK_CLIENT_SECRET(self) -> str:
+        return self._config.KEYCLOAK_CLIENT_SECRET
+
+    @property
+    def KEYCLOAK_ADMIN_USER(self) -> str:
+        return self._config.KEYCLOAK_ADMIN_USER
+
+    @property
+    def KEYCLOAK_ADMIN_PASSWORD(self) -> str:
+        return self._config.KEYCLOAK_ADMIN_PASSWORD
+
+    @property
+    def NATS_URL(self) -> str:
+        return self._config.NATS_URL
+
+identity_settings = IdentitySettingsAdapter(_settings)
