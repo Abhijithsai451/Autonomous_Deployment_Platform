@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from apps.organization.domain.events.project_events import ProjectCreatedEvent, ProjectUpdatedEvent, \
+from packages.events.services_events.organization_events import ProjectCreatedEvent, ProjectUpdatedEvent, \
     ProjectSuspendedEvent, ProjectArchivedEvent, ProjectNotFoundEvent
 from apps.organization.domain.outbox import OutboxEvent, OutboxStatus
 from apps.organization.domain.project import Project, ProjectStatus

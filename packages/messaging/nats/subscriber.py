@@ -3,7 +3,7 @@ from typing import Callable, Dict, Any, Awaitable, Type
 
 from nats.js.api import ConsumerConfig, DeliverPolicy
 
-from infrastructure.nats.nats_client import NatsClient
+from packages.messaging.nats.nats_client import NatsClient
 from packages.events.base import BaseEvent
 from packages.events.context import RequestContext
 from packages.events.serializer import EventSerializer
@@ -85,8 +85,8 @@ class Subscriber:
                         )
                         dlq_subject = f"{subject.split('.')[0]}.dlq"
                         await self.client.js.publish(
-                            subject=dlq_subject,
-                            payload=msg.data,
+                            dlq_subject,
+                            msg.data,
                             headers={
                                 "x-dlq-reason": str(e),
                                 "x-original-subject": msg.subject,

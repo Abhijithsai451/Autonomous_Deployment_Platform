@@ -3,7 +3,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from apps.organization.domain.events.organization_events import OrganizationCreatedEvent, OrganizationUpdatedEvent, \
+from packages.events.services_events.organization_events import OrganizationCreatedEvent, OrganizationUpdatedEvent, \
     OrganizationStatusUpdatedEvent, OrganizationNotFoundEvent, OrganizationSuspendedEvent
 from apps.organization.domain.organization import Organization, OrgStatus
 from apps.organization.domain.outbox import OutboxEvent, OutboxStatus

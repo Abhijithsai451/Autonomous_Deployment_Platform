@@ -4,7 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from apps.organization.domain.department import Department, DepartmentStatus
-from apps.organization.domain.events.department_events import DepartmentCreatedEvent, DepartmentUpdatedEvent, \
+from packages.events.services_events.organization_events import DepartmentCreatedEvent, DepartmentUpdatedEvent, \
     DepartmentDeletedEvent, DepartmentArchivedEvent, DepartmentNotFoundEvent
 from apps.organization.domain.outbox import OutboxEvent, OutboxStatus
 

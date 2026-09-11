@@ -5,10 +5,10 @@ from uuid import UUID
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from apps.workflow.domain.events.instance_events import WorkflowInstanceCreated, WorkflowInstanceNotFound, \
+from packages.events.services_events.workflow_events import WorkflowInstanceCreated, WorkflowInstanceNotFound, \
     WorkflowStartedEvent, WorkflowCompletedEvent, WorkflowFailedEvent, WorkflowPausedEvent, WorkflowResumedEvent, \
     WorkflowCancelledEvent, WorkflowRetryEvent, WorkflowTimedOutEvent, WorkflowSignalInstanceEvent
-from apps.workflow.domain.events.tasks_events import TaskReadyEvent
+from packages.events.services_events.workflow_events import TaskReadyEvent
 from apps.workflow.domain.outbox import OutboxEvent, OutboxStatus
 from apps.workflow.domain.tasks import Task, TaskStatus
 from apps.workflow.domain.workflow_event import WorkflowEvent

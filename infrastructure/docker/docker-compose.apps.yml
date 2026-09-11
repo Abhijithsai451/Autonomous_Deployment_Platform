@@ -85,10 +85,6 @@ services:
     env_file:
       - ../../.env
     environment:
-      - AGENT_RUNTIME_DATABASE_URL
-      - NATS_URL
-      - REDIS_HOST
-      - REDIS_PORT
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://cortexops_otel_collector:4317
     networks:
       - shared_network

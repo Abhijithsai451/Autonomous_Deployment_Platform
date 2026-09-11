@@ -1,4 +1,6 @@
 import asyncio
+
+from apps.identity.infrastructure.database import db_client
 from apps.identity.infrastructure.identity_nats_client import identity_nats_client as nats
 from apps.identity.infrastructure.outbox_publisher import IdentityOutboxPublisher
 from apps.identity.infrastructure.structured_logs import struct_logger as logger
@@ -10,6 +12,8 @@ identity_publisher = IdentityOutboxPublisher(poll_interval_seconds=0.01, batch_s
 
 @asynccontextmanager
 async def identity_lifespan(app: FastAPI):
+    if not db_client.check_health():
+        raise RuntimeError("Identity database health check failed on startup!")
     await nats.initialize()
     logger.info("NATS Messaging Core successfully initialized.")
 

@@ -8,6 +8,7 @@ from sqlalchemy.orm.exc import StaleDataError
 
 from apps.agent_runtime.api import health
 from apps.agent_runtime.infrastructure.agent_runtime_nats_client import agent_nats_client as nats
+from apps.agent_runtime.infrastructure.database import agent_runtime_db_client
 from apps.agent_runtime.infrastructure.outbox_publisher import agent_outbox_publisher
 from apps.agent_runtime.infrastructure.struct_logger import struct_logger as logger
 from apps.agent_runtime.infrastructure.telemetry import AgentObservability
@@ -16,7 +17,8 @@ from packages.telemetry.provider import init_telemetry
 
 @asynccontextmanager
 async def agent_lifespan(app: FastAPI):
-    # 1. Initialize OpenTelemetry SDK (Traces, Metrics, Logs)
+    if not agent_runtime_db_client.check_health():
+        raise RuntimeError("Agent Runtime database health check failed on startup!")
     init_telemetry(service_name="cortexops-agent-runtime", environment="local")
     logger.info("Initializing the Agent Runtime Daemon ....")
 

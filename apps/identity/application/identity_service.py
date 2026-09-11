@@ -5,12 +5,12 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from apps.identity.domain.api_key import ApiKey
-from apps.identity.domain.events.api_events import APIKeyCreatedEvent, APIKeyRevokedEvent
-from apps.identity.domain.events.role_events import RoleCreatedEvent, RoleAssignedToUserEvent, RoleRemovedFromUserEvent
-from apps.identity.domain.events.service_account_events import ServiceAccountCreatedEvent
+from packages.events.services_events.identity_events import APIKeyCreatedEvent, APIKeyRevokedEvent, UserInvitedEvent, \
+    UserActivatedEvent, UserDisabledEvent
+from packages.events.services_events.identity_events import RoleCreatedEvent, RoleAssignedToUserEvent, RoleRemovedFromUserEvent
+from packages.events.services_events.identity_events import ServiceAccountCreatedEvent
 from apps.identity.domain.outbox import OutboxEvent, OutboxStatus
-from apps.identity.domain.events.user_events import *
-from apps.identity.domain.role import *
+from apps.identity.domain.role import Role
 from apps.identity.domain.service_account import ServiceAccount
 from apps.identity.domain.user import UserStatus, User
 from apps.identity.infrastructure.identity_nats_client import identity_nats_client as nats
